@@ -1,0 +1,33 @@
+# clang-tidy 18 configuration for market_classifier project code.
+# Excludes third-party headers via HeaderFilterRegex.
+---
+Checks: >
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -readability-magic-numbers,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-type-vararg
+
+WarningsAsErrors: "*"
+
+HeaderFilterRegex: "engine/include/market_classifier/.*"
+
+CheckOptions:
+  - key:   readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key:   readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key:   readability-identifier-naming.VariableCase
+    value: lower_case
+  - key:   readability-identifier-naming.ConstantPrefix
+    value: k_
+  - key:   modernize-use-default-member-init.UseAssignment
+    value: "true"
+...

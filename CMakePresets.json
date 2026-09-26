@@ -1,0 +1,83 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "native-release",
+      "displayName": "Native release (Windows/Linux)",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "native-debug",
+      "displayName": "Native debug",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "wasm-release",
+      "displayName": "WebAssembly release (invoke via: emcmake cmake --preset wasm-release)",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "wasm-debug",
+      "displayName": "WebAssembly debug (invoke via: emcmake cmake --preset wasm-debug)",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "native-release",
+      "configurePreset": "native-release"
+    },
+    {
+      "name": "native-debug",
+      "configurePreset": "native-debug"
+    },
+    {
+      "name": "wasm-release",
+      "configurePreset": "wasm-release"
+    },
+    {
+      "name": "wasm-debug",
+      "configurePreset": "wasm-debug"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "native",
+      "configurePreset": "native-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "native-debug",
+      "configurePreset": "native-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+# Build outputs
+build/
+out/
+.tools/
+
+# Emscripten output copied to web static dir (keep .gitkeep, ignore build artifacts)
+apps/web/static/wasm/*.js
+apps/web/static/wasm/*.wasm
+apps/web/static/wasm/*.gz
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+
+# SvelteKit generated
+.svelte-kit/
+apps/web/.svelte-kit/
+
+# Playwright results
+test-results/
+playwright-report/
+apps/web/test-results/
+apps/web/playwright-report/
+
+# CMake generated
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Editors
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Emscripten cache
+.emscripten_cache/
+
+# Compiled objects
+*.o
+*.a
+*.so
+*.dll
+*.wasm
+
+# Logs
+*.log
