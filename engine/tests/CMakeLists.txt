@@ -4,6 +4,7 @@ add_executable(mc_tests
     test_decimal.cpp
     test_domain_contracts.cpp
     test_bridge_protocol.cpp
+    test_runtime.cpp
     test_version.cpp
 )
 

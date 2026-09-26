@@ -7,6 +7,8 @@ add_library(mc_domain STATIC
     src/bridge/protocol.cpp
     src/domain/decimal.cpp
     src/domain/types.cpp
+    src/runtime/clock.cpp
+    src/runtime/ingress.cpp
 )
 
 target_include_directories(mc_domain PUBLIC
