@@ -1,0 +1,39 @@
+{
+	"name": "market-classifier-web",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"packageManager": "pnpm@9.11.0",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"lint": "prettier --check . && eslint .",
+		"format": "prettier --write .",
+		"measure:runtime": "node tools/measure-runtime.mjs",
+		"test": "playwright test",
+		"test:ui": "playwright test --ui"
+	},
+	"dependencies": {
+		"@sveltejs/kit": "2.5.28",
+		"svelte": "5.1.3"
+	},
+	"devDependencies": {
+		"@eslint/js": "9.11.1",
+		"@playwright/test": "1.47.2",
+		"@sveltejs/adapter-static": "3.0.5",
+		"@sveltejs/vite-plugin-svelte": "4.0.0",
+		"@typescript-eslint/eslint-plugin": "8.8.0",
+		"@typescript-eslint/parser": "8.8.0",
+		"eslint": "9.11.1",
+		"eslint-plugin-svelte": "2.44.0",
+		"prettier": "3.3.3",
+		"prettier-plugin-svelte": "3.2.6",
+		"svelte-check": "4.0.4",
+		"svelte-eslint-parser": "0.43.0",
+		"typescript": "5.5.4",
+		"vite": "5.4.8"
+	}
+}

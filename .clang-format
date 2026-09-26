@@ -1,0 +1,46 @@
+# clang-format 18 configuration for market_classifier.
+# Applied to engine/ and bridge/ project code only; not to third_party/.
+---
+Language:        Cpp
+BasedOnStyle:    LLVM
+IndentWidth:     4
+TabWidth:        4
+UseTab:          Never
+ColumnLimit:     100
+PointerAlignment: Right
+AlignConsecutiveAssignments:
+  Enabled:       true
+  AcrossComments: false
+  AcrossEmptyLines: false
+AlignConsecutiveDeclarations:
+  Enabled:       false
+AlignTrailingComments: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+BreakBeforeBraces: Attach
+IncludeBlocks:   Regroup
+IncludeCategories:
+  # Project headers
+  - Regex:       '"market_classifier/'
+    Priority:    1
+  # Dear ImGui / ImPlot (third-party via SYSTEM)
+  - Regex:       '"imgui'
+    Priority:    2
+  - Regex:       '"implot'
+    Priority:    2
+  # SDL
+  - Regex:       '<SDL2/'
+    Priority:    3
+  # Emscripten
+  - Regex:       '<emscripten'
+    Priority:    3
+  # Standard library
+  - Regex:       '<.*>'
+    Priority:    4
+SortIncludes:    CaseSensitive
+SpaceBeforeParens: ControlStatements
+SpacesInAngles:  Never
+SpacesInParentheses: false
+Standard:        c++20
+...

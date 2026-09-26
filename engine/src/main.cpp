@@ -1,0 +1,345 @@
+// Market Classifier terminal — M0 feasibility spike.
+//
+// Boots a full-window Dear ImGui docking canvas with two dockable panels:
+//   1. Lissajous plot (ImPlot, deterministic seeded data)
+//   2. Build info panel
+//
+// Platform matrix:
+//   Native Windows/Linux: SDL2 + OpenGL 3.3 Core + imgui_impl_opengl3
+//   WASM/Emscripten:      SDL2 port + OpenGL ES 3 / WebGL 2 + imgui_impl_opengl3
+//
+// Refs:
+//   Dear ImGui Emscripten example: imgui/examples/example_emscripten_opengl3
+//   Emscripten set_main_loop: https://emscripten.org/docs/api_reference/emscripten.h.html
+//   SDL2 OpenGL ES 3 on Emscripten: https://emscripten.org/docs/porting/multimedia_and_graphics/OpenGL-support.html
+//   Verification date: 2026-09-24
+
+#include "market_classifier/version.hpp"
+
+#include "imgui.h"
+#include "imgui_impl_opengl3.h"
+#include "imgui_impl_sdl2.h"
+#include "implot.h"
+
+// On native Windows/Linux: prevent SDL2 from redefining main() via SDL_main.h.
+// SDL_SetMainReady() must be called before SDL_Init() when this macro is defined.
+// On Emscripten: Emscripten manages the entry point itself; this macro is not needed.
+#ifndef __EMSCRIPTEN__
+#  define SDL_MAIN_HANDLED
+#endif
+#include <SDL2/SDL.h>
+
+#ifdef __EMSCRIPTEN__
+// OpenGL ES 3 / WebGL 2
+#include <GLES3/gl3.h>
+#include <emscripten.h>
+#else
+// Desktop OpenGL — provided by the platform or by SDL2's OpenGL headers
+#include <SDL2/SDL_opengl.h>
+#endif
+
+#include <array>
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <numbers>
+
+// ---------------------------------------------------------------------------
+// Lissajous curve — deterministic, generated once at startup, never touches
+// the network.  Parameters are compile-time constants to ensure reproducibility.
+// ---------------------------------------------------------------------------
+namespace {
+
+constexpr int   k_lissajous_points = 512;
+constexpr float k_freq_x           = 3.0f;
+constexpr float k_freq_y           = 2.0f;
+constexpr float k_phase            = static_cast<float>(std::numbers::pi / 4.0);
+constexpr int   k_timing_warmup_frames = 30;
+constexpr int   k_timing_sample_frames = 120;
+
+struct LissajousData {
+    std::array<double, k_lissajous_points> xs{};
+    std::array<double, k_lissajous_points> ys{};
+
+    LissajousData() noexcept {
+        for (int i = 0; i < k_lissajous_points; ++i) {
+            const double t = (2.0 * std::numbers::pi * i) / (k_lissajous_points - 1);
+            xs[i]          = std::sin(k_freq_x * t + k_phase);
+            ys[i]          = std::sin(k_freq_y * t);
+        }
+    }
+};
+
+// Initialized once; no heap allocation in the render loop.
+const LissajousData k_lissajous{};
+
+// ---------------------------------------------------------------------------
+// Application state — struct kept here so MainLoopStep can be a plain function
+// pointer as required by emscripten_set_main_loop.
+// ---------------------------------------------------------------------------
+struct AppState {
+    SDL_Window*   window     = nullptr;
+    SDL_GLContext gl_context = nullptr;
+    bool          done       = false;
+    bool          ready_sent = false;
+    bool          metrics_sent = false;
+    int           frame      = 0;
+    std::array<double, k_timing_sample_frames> render_ms{};
+    int           render_sample_count = 0;
+};
+
+AppState g_state{};
+
+// ---------------------------------------------------------------------------
+// JS signals — set data attributes readable by Playwright smoke tests.
+// Called only from the WASM build; no-ops in native.
+// ---------------------------------------------------------------------------
+#ifdef __EMSCRIPTEN__
+// clang-format off
+EM_JS(void, js_set_wasm_ready, (), {
+    document.body.dataset.wasmStatus = 'ready';
+    document.body.dataset.wasmReadyMs = performance.now().toFixed(3);
+});
+
+EM_JS(void, js_increment_frame_count, (), {
+    var n = parseInt(document.body.dataset.frameCount || '0');
+    document.body.dataset.frameCount = String(n + 1);
+});
+
+EM_JS(void, js_publish_render_metrics, (double mean_ms, double p95_ms), {
+    document.body.dataset.renderMeanMs = mean_ms.toFixed(3);
+    document.body.dataset.renderP95Ms = p95_ms.toFixed(3);
+    document.body.dataset.wasmHeapBytes = String(HEAPU8.buffer.byteLength);
+});
+// clang-format on
+#endif
+
+// ---------------------------------------------------------------------------
+// Main loop step — must be a plain void() function for emscripten_set_main_loop.
+// ---------------------------------------------------------------------------
+void MainLoopStep() noexcept {
+#ifdef __EMSCRIPTEN__
+    const double render_started_ms = emscripten_get_now();
+#endif
+    SDL_Event event{};
+    while (SDL_PollEvent(&event) != 0) {
+        ImGui_ImplSDL2_ProcessEvent(&event);
+        if (event.type == SDL_QUIT) {
+            g_state.done = true;
+        }
+        if (event.type == SDL_WINDOWEVENT &&
+            event.window.event == SDL_WINDOWEVENT_CLOSE &&
+            event.window.windowID == SDL_GetWindowID(g_state.window)) {
+            g_state.done = true;
+        }
+    }
+
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL2_NewFrame();
+    ImGui::NewFrame();
+
+    // Full-window dockspace — panels dock into this invisible host window.
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    ImGui::SetNextWindowViewport(viewport->ID);
+
+    constexpr ImGuiWindowFlags dockspace_flags =
+        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus |
+        ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::Begin("##dockspace_root", nullptr, dockspace_flags);
+    ImGui::PopStyleVar(3);
+
+    ImGuiID dockspace_id = ImGui::GetID("RootDockSpace");
+    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+    ImGui::End();
+
+    // ---------------------------------------------------------------------------
+    // Panel 1 — Lissajous curve (ImPlot)
+    // ---------------------------------------------------------------------------
+    ImGui::Begin("Demo: Lissajous [M0]");
+    ImGui::TextUnformatted("Market Classifier — M0 toolchain spike");
+    ImGui::Text("Version: %s", market_classifier::k_version_string.data());
+    ImGui::Text("Frame:   %d", g_state.frame);
+    ImGui::Separator();
+    ImGui::TextUnformatted("Lissajous 3:2 (deterministic — not market data)");
+
+    if (ImPlot::BeginPlot("##lissajous", ImVec2(-1, -1),
+                          ImPlotFlags_NoBoxSelect | ImPlotFlags_NoMouseText)) {
+        ImPlot::SetupAxes("x", "y",
+                          ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickLabels,
+                          ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickLabels);
+        ImPlot::SetupAxesLimits(-1.1, 1.1, -1.1, 1.1, ImPlotCond_Always);
+        ImPlot::PlotLine("lissajous_3_2",
+                         k_lissajous.xs.data(),
+                         k_lissajous.ys.data(),
+                         k_lissajous_points);
+        ImPlot::EndPlot();
+    }
+    ImGui::End();
+
+    // ---------------------------------------------------------------------------
+    // Panel 2 — Build info
+    // A second dockable window satisfies: "at least two ImGui windows can
+    // dock/tab/resize" (M0 acceptance checklist).
+    // ---------------------------------------------------------------------------
+    ImGui::Begin("Build Info [M0]");
+    ImGui::TextUnformatted("Toolchain spike — no exchange connections");
+    ImGui::Separator();
+    ImGui::Text("Engine version: %s", market_classifier::k_version_string.data());
+#ifdef __EMSCRIPTEN__
+    ImGui::TextUnformatted("Runtime:  WebAssembly / WebGL 2");
+    ImGui::TextUnformatted("Backend:  SDL2 + OpenGL ES 3 (Emscripten port)");
+#else
+    ImGui::TextUnformatted("Runtime:  native");
+    ImGui::TextUnformatted("Backend:  SDL2 + OpenGL 3.3 Core (desktop)");
+#endif
+    ImGui::Separator();
+    ImGui::TextUnformatted("Drag this window onto the Lissajous panel to tab/dock.");
+    ImGui::End();
+
+    // Render
+    ImGui::Render();
+    ImGuiIO& io = ImGui::GetIO();
+    glViewport(0, 0, static_cast<int>(io.DisplaySize.x), static_cast<int>(io.DisplaySize.y));
+    glClearColor(0.12f, 0.12f, 0.13f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    SDL_GL_SwapWindow(g_state.window);
+
+    ++g_state.frame;
+
+#ifdef __EMSCRIPTEN__
+    if (g_state.frame > k_timing_warmup_frames &&
+        g_state.render_sample_count < k_timing_sample_frames) {
+        g_state.render_ms[static_cast<std::size_t>(g_state.render_sample_count)] =
+            emscripten_get_now() - render_started_ms;
+        ++g_state.render_sample_count;
+    }
+
+    if (!g_state.metrics_sent && g_state.render_sample_count == k_timing_sample_frames) {
+        auto sorted_samples = g_state.render_ms;
+        std::sort(sorted_samples.begin(), sorted_samples.end());
+
+        double total_ms = 0.0;
+        for (const double sample_ms : g_state.render_ms) {
+            total_ms += sample_ms;
+        }
+
+        constexpr std::size_t p95_index =
+            static_cast<std::size_t>(k_timing_sample_frames * 95 / 100) - 1;
+        js_publish_render_metrics(total_ms / k_timing_sample_frames,
+                                  sorted_samples[p95_index]);
+        g_state.metrics_sent = true;
+    }
+
+    if (!g_state.ready_sent) {
+        js_set_wasm_ready();
+        g_state.ready_sent = true;
+    }
+    js_increment_frame_count();
+#endif
+}
+
+} // anonymous namespace
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
+int main(int /*argc*/, char* /*argv*/[]) {
+#ifndef __EMSCRIPTEN__
+    SDL_SetMainReady(); // required when SDL_MAIN_HANDLED is defined
+#endif
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
+        std::fprintf(stderr, "SDL_Init error: %s\n", SDL_GetError());
+        return 1;
+    }
+
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
+
+#ifdef __EMSCRIPTEN__
+    // Emscripten/WebGL 2 — request OpenGL ES 3.0 context.
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+    const char* glsl_version = "#version 300 es";
+#else
+    // Desktop — request OpenGL 3.3 Core.
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    const char* glsl_version = "#version 330 core";
+#endif
+
+    constexpr SDL_WindowFlags window_flags =
+        static_cast<SDL_WindowFlags>(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
+                                     SDL_WINDOW_ALLOW_HIGHDPI);
+
+    g_state.window = SDL_CreateWindow(
+        "Market Classifier",
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        1280, 720,
+        window_flags
+    );
+    if (g_state.window == nullptr) {
+        std::fprintf(stderr, "SDL_CreateWindow error: %s\n", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    g_state.gl_context = SDL_GL_CreateContext(g_state.window);
+    if (g_state.gl_context == nullptr) {
+        std::fprintf(stderr, "SDL_GL_CreateContext error: %s\n", SDL_GetError());
+        SDL_DestroyWindow(g_state.window);
+        SDL_Quit();
+        return 1;
+    }
+
+    SDL_GL_MakeCurrent(g_state.window, g_state.gl_context);
+    SDL_GL_SetSwapInterval(1); // vsync
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImPlot::CreateContext();
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    // Multi-viewport requires native OS windows; incompatible with browser canvas.
+    io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
+
+    ImGui::StyleColorsDark();
+
+    ImGui_ImplSDL2_InitForOpenGL(g_state.window, g_state.gl_context);
+    ImGui_ImplOpenGL3_Init(glsl_version);
+
+#ifdef __EMSCRIPTEN__
+    // Browser requires a non-blocking loop driven by requestAnimationFrame.
+    // 0 fps = use browser's own frame scheduling.
+    emscripten_set_main_loop(MainLoopStep, 0, true);
+    // Execution does not return past this point in WASM.
+#else
+    while (!g_state.done) {
+        MainLoopStep();
+    }
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImPlot::DestroyContext();
+    ImGui::DestroyContext();
+    SDL_GL_DeleteContext(g_state.gl_context);
+    SDL_DestroyWindow(g_state.window);
+    SDL_Quit();
+#endif
+
+    return 0;
+}
