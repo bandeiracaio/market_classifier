@@ -1,9 +1,9 @@
 # M1 — Domain Core and Bridge Contract
 
-Status: In progress; Slices 1 through 6 implemented
+Status: Accepted locally on 2026-09-26; first remote CI run pending
 Parent specification: `SPECIFICATION.md`, sections 9, 18, 19, and 22  
 Prerequisite: M0 accepted locally at commit `b8582a3`; first remote CI run pending  
-Scope owner: project owner  
+Scope owner: project owner
 
 ## Objective
 
@@ -193,20 +193,82 @@ construction/validation tests; no speculative processor behavior is required.
 - [x] No exchange, telemetry, authenticated, or deferred-roadmap network request exists.
 - [x] Review finds no unresolved S0/S1 issue.
 
-## Initial resource limits to decide and test
+## M1 resource limits
 
-The implementation proposal must choose explicit M1 values for:
+These conservative limits are enforced before unbounded allocation or iteration. Numeric
+tuning may follow measured venue requirements; changing protocol semantics requires review.
 
-- maximum bridge message bytes;
-- maximum events per ingress batch;
-- maximum queued batches and/or bytes;
-- maximum native symbol and identifier lengths;
-- maximum decimal text length and scale magnitude;
-- maximum retained diagnostics samples.
+| Resource                        |       M1 limit | Rationale / source                                                                                                                                    |
+| ------------------------------- | -------------: | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Complete bridge message         |   65,536 bytes | ADR-0004; reject before payload allocation.                                                                                                           |
+| Events per bridge/ingress batch |            256 | ADR-0004 and ingress contract; bounds per-submit decode and queue work.                                                                               |
+| Queued ingress batches          |              8 | Fixed queue bound in `runtime/ingress.hpp`.                                                                                                           |
+| Queued encoded ingress bytes    |        512 KiB | Fixed aggregate queue bound in `runtime/ingress.hpp`.                                                                                                 |
+| Native symbol                   |       64 bytes | ADR-0004; matches normalized instrument identifier limit.                                                                                             |
+| Source identifier               |      128 bytes | ADR-0004; validated before owned string construction.                                                                                                 |
+| Decimal input text              |       64 bytes | ADR-0003; bounds parse work.                                                                                                                          |
+| Decimal scale                   | 0–18 inclusive | ADR-0003; portable fixed-width decimal representation.                                                                                                |
+| Dynamic event text              |      128 bytes | `runtime/ingress.hpp`; bounds owned event memory.                                                                                                     |
+| Book levels per event           |          1,024 | `runtime/ingress.hpp`; bounds owned event memory.                                                                                                     |
+| Replay entries                  |          4,096 | `runtime/replay.hpp`; bounds deterministic replay input.                                                                                              |
+| Retained diagnostic samples     |              0 | M1 keeps fixed counters/status only; no diagnostic sample history or ring buffer is retained. Revisit when a diagnostics-history UI is in scope (M3). |
 
-Values must be conservative, configurable where future venue measurements may change them,
-and enforced before allocation or iteration. Changing their semantics later requires review;
-tuning measured numeric values does not necessarily require a protocol change.
+## M1 local closeout and handoff
+
+### Outcome and decisions
+
+M1 is accepted locally. ADR-0003 selects a project-owned signed 64-bit mantissa with scale
+0–18, strict bounded parsing, canonical serialization, numeric cross-scale comparison, and
+exact-only rescaling. ADR-0004 selects the versioned 16-byte little-endian envelope with a
+65,536-byte/256-event bound and fail-closed categorized errors. No new dependencies or live
+venue connections were added.
+
+### Fixture, rejection, and replay evidence
+
+- Cross-language golden fixture: `fixtures/m1/trade-batch-v1.hex` (91-byte, one-trade V1 batch).
+- C++ and TypeScript codec tests cover the shared fixture, round trips, bounds, truncation,
+  unsupported versions/kinds, invalid fields, and categorized rejection. The Playwright WASM
+  test submits one valid batch and an unsupported-version mutation, checks the diagnostic,
+  read-model count/drop count, and continued frame progress.
+- Native replay tests prove the reference timeline is deterministic and advances without
+  sleeping; ingress/read-model tests cover ordering, overflow, counters, and quality state.
+
+### Verification record
+
+- Native warning-as-error build: passed; CTest: 30/30 passed.
+- WASM/Emscripten build: passed.
+- TypeScript/Svelte check: passed (0 errors, 0 warnings); bridge tests: 2/2 passed.
+- Prettier and ESLint: passed; production web build: passed.
+- Playwright Chromium smoke suite: 9/9 passed, including bridge acceptance/rejection and
+  continued rendering; test also verifies no market-data network requests.
+- GitHub Actions has not yet been verified because GitHub connectivity/authentication is
+  temporarily unavailable. Repeat remote CI after access is restored before treating CI as
+  green; this does not change the local acceptance result.
+
+Commands run from the repository root:
+
+```powershell
+cmd /c 'call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" && .tools\python\Scripts\cmake.exe --build build\native-verified'
+.tools\python\Lib\site-packages\cmake\data\bin\ctest.exe --test-dir build/native-verified --output-on-failure
+cmd /c "call .tools\emsdk\emsdk_env.bat && .tools\python\Scripts\cmake.exe --build build\wasm-verified"
+corepack pnpm --dir apps/web check
+corepack pnpm --dir apps/web test:bridge
+corepack pnpm --dir apps/web lint
+corepack pnpm --dir apps/web build
+corepack pnpm --dir apps/web test
+```
+
+### Performance and deferrals
+
+The shared TypeScript codec benchmark is recorded in ADR-0004 and `docs/performance/m1-bridge.md`:
+256 events / 19,216 bytes, mean encode 0.243 ms and decode 0.124 ms on the M0 reference
+machine. The browser smoke separately measured decode-only for a 91-byte batch (50 warmups,
+1,000 iterations, 0.001 ms mean in that run); timer resolution and payload size make this a
+smoke observation, not a regression threshold or end-to-end ingress-to-render latency claim.
+
+Real venue catalogs, additional bridge event kinds, retained diagnostic history, persistence,
+and production panels remain deferred to their specified milestones. Re-evaluate bounded
+diagnostic sample retention when the M3 diagnostics panel is designed.
 
 ## Stop conditions
 
