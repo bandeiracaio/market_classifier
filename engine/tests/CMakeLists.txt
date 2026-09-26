@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 add_executable(mc_tests
     test_decimal.cpp
+    test_domain_contracts.cpp
     test_version.cpp
 )
 

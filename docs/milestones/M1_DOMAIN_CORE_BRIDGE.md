@@ -175,9 +175,9 @@ construction/validation tests; no speculative processor behavior is required.
 - [x] ADR-0003 is accepted before decimal implementation lands.
 - [x] Decimal tests cover normal, boundary, malformed, overflow, and cross-scale cases.
 - [x] No domain price or quantity uses binary floating point.
-- [ ] Normalized identifiers and metadata preserve venue, native symbol, three time/sequence
+- [x] Normalized identifiers and metadata preserve venue, native symbol, three time/sequence
       concepts, and quality state.
-- [ ] All required normalized event contracts are defined without venue JSON coupling.
+- [x] All required normalized event contracts are defined without venue JSON coupling.
 - [ ] ADR-0004 is accepted before the final bridge encoding lands.
 - [ ] C++ and TypeScript agree on protocol version, message kinds, limits, and fixture bytes.
 - [ ] Malformed, truncated, oversized, and unsupported bridge messages reject safely.

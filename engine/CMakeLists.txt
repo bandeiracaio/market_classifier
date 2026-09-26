@@ -5,6 +5,7 @@ cmake_minimum_required(VERSION 3.28)
 # ---------------------------------------------------------------------------
 add_library(mc_domain STATIC
     src/domain/decimal.cpp
+    src/domain/types.cpp
 )
 
 target_include_directories(mc_domain PUBLIC
