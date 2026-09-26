@@ -88,6 +88,36 @@ test.describe('WASM terminal (requires WASM build)', () => {
 		expect(metrics.readyMs).toBeGreaterThan(0);
 	});
 
+	test('valid and malformed bridge batches are diagnosed while rendering continues', async ({
+		page
+	}) => {
+		await page.goto('/');
+		await page.waitForFunction(() => document.body.dataset.bridgeInvalidError !== undefined, {
+			timeout: 30_000
+		});
+
+		const diagnostics = await page.evaluate(() => ({
+			validResult: document.body.dataset.bridgeValidResult,
+			invalidError: document.body.dataset.bridgeInvalidError,
+			readModelEvents: Number(document.body.dataset.bridgeReadModelEvents),
+			droppedBatches: Number(document.body.dataset.bridgeDroppedBatches),
+			payloadBytes: Number(document.body.dataset.bridgePayloadBytes),
+			decodeMeanMs: Number(document.body.dataset.bridgeDecodeMeanMs),
+			frames: Number(document.body.dataset.frameCount)
+		}));
+		expect(diagnostics.validResult).toBe('accepted');
+		expect(diagnostics.invalidError).toBe('unsupported-version');
+		expect(diagnostics.readModelEvents).toBe(1);
+		expect(diagnostics.droppedBatches).toBe(0);
+		expect(diagnostics.payloadBytes).toBeGreaterThan(0);
+		expect(diagnostics.decodeMeanMs).toBeGreaterThan(0);
+		await page.waitForFunction(
+			(previous) => Number(document.body.dataset.frameCount) > previous,
+			diagnostics.frames,
+			{ timeout: 10_000 }
+		);
+	});
+
 	test('canvas is visible when WASM is ready', async ({ page }) => {
 		await page.goto('/');
 		await page.waitForFunction(() => document.body.dataset.wasmStatus === 'ready', {

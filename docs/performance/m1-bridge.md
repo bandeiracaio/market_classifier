@@ -21,3 +21,13 @@ The maximum-size event-count batch is far below the 16.7 ms active-frame budget.
 microbenchmark, not an ingress-to-render latency claim; Slice 5 replay will measure the full
 path. Re-run and record distribution percentiles before using this result as a regression
 gate.
+
+## Browser/WASM proof
+
+On 2026-09-26, the Playwright Chromium smoke path submitted the 91-byte shared one-trade
+fixture through the C++ WASM decoder, bounded ingress queue, and dummy read model. It accepted
+one event with zero dropped batches. The test then submitted a copy with an unsupported
+protocol version and received the `unsupported-version` diagnostic; frame count continued
+to advance. After 50 warmups, 1,000 decode-only iterations averaged 0.001 ms per 91-byte
+message in this browser run. `performance.now()` precision and the tiny single-event payload
+make this a smoke measurement, not a performance regression threshold.

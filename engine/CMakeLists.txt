@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.28)
 # Pure domain library — no UI, platform, Emscripten, or venue dependencies
 # ---------------------------------------------------------------------------
 add_library(mc_domain STATIC
+    src/bridge/browser_api.cpp
     src/bridge/protocol.cpp
     src/domain/decimal.cpp
     src/domain/types.cpp
@@ -87,6 +88,7 @@ if(EMSCRIPTEN)
         "SHELL:-s ENVIRONMENT=web"
         "SHELL:-s EXPORT_NAME=MarketClassifier"
         "SHELL:-s MODULARIZE=1"
+        "SHELL:-s EXPORTED_FUNCTIONS=['_main','_mc_bridge_decode','_mc_bridge_submit','_mc_bridge_result_name','_mc_bridge_read_model_events','_mc_bridge_dropped_batches']"
     )
 
     # Copy .wasm alongside .js — Emscripten generates both with matching names

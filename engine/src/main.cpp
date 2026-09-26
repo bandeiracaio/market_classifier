@@ -14,6 +14,9 @@
 //   SDL2 OpenGL ES 3 on Emscripten: https://emscripten.org/docs/porting/multimedia_and_graphics/OpenGL-support.html
 //   Verification date: 2026-09-24
 
+#include "market_classifier/bridge/browser_api.hpp"
+#include "market_classifier/bridge/protocol.hpp"
+#include "market_classifier/domain/events.hpp"
 #include "market_classifier/version.hpp"
 
 #include "imgui.h"
@@ -83,6 +86,7 @@ struct AppState {
     bool          done       = false;
     bool          ready_sent = false;
     bool          metrics_sent = false;
+    bool          bridge_smoke_sent = false;
     int           frame      = 0;
     std::array<double, k_timing_sample_frames> render_ms{};
     int           render_sample_count = 0;
@@ -111,7 +115,52 @@ EM_JS(void, js_publish_render_metrics, (double mean_ms, double p95_ms), {
     document.body.dataset.renderP95Ms = p95_ms.toFixed(3);
     document.body.dataset.wasmHeapBytes = String(HEAPU8.buffer.byteLength);
 });
+EM_JS(void, js_exercise_bridge, (const uint8_t* bytes, int size), {
+    const validResult = Module._mc_bridge_submit(bytes, size);
+    const savedVersion = HEAPU8[bytes + 4];
+    HEAPU8[bytes + 4] = savedVersion + 1;
+    const invalidResult = Module._mc_bridge_submit(bytes, size);
+    HEAPU8[bytes + 4] = savedVersion;
+
+    const name = (code) => UTF8ToString(Module._mc_bridge_result_name(code));
+    document.body.dataset.bridgeValidResult = name(validResult);
+    document.body.dataset.bridgeInvalidError = name(invalidResult);
+    document.body.dataset.bridgeReadModelEvents = String(Module._mc_bridge_read_model_events());
+    document.body.dataset.bridgeDroppedBatches = String(Module._mc_bridge_dropped_batches());
+    document.body.dataset.bridgePayloadBytes = String(size);
+
+    for (let i = 0; i < 50; ++i) Module._mc_bridge_decode(bytes, size);
+    const started = performance.now();
+    const iterations = 1000;
+    for (let i = 0; i < iterations; ++i) Module._mc_bridge_decode(bytes, size);
+    document.body.dataset.bridgeDecodeMeanMs = ((performance.now() - started) / iterations).toFixed(6);
+});
 // clang-format on
+
+void RunBridgeSmokeOnce() {
+    const auto instrument = market_classifier::domain::InstrumentId::create(
+        market_classifier::domain::Venue::BinanceUsdM, "BTCUSDT");
+    const auto price    = market_classifier::domain::Decimal::parse("42000.25");
+    const auto quantity = market_classifier::domain::Decimal::parse("0.125");
+    const auto notional = market_classifier::domain::Decimal::parse("5250.03125");
+    if (!instrument || !price || !quantity || !notional)
+        return;
+
+    const auto meta = market_classifier::domain::EventMeta::create(
+        instrument.value, market_classifier::domain::SourceTimeMs{1'700'000'000'000},
+        market_classifier::domain::ReceiveTimeMs{1'700'000'000'007},
+        market_classifier::domain::LocalSequence{42}, market_classifier::domain::DataQuality::Live);
+    if (!meta)
+        return;
+
+    const market_classifier::domain::Trade trade{
+        meta.value,  "trade-123",    market_classifier::domain::AggressorSide::Buy,
+        price.value, quantity.value, notional.value};
+    const auto bytes = market_classifier::bridge::encode_trade_batch(std::span{&trade, 1U});
+    if (!bytes.empty()) {
+        js_exercise_bridge(bytes.data(), static_cast<int>(bytes.size()));
+    }
+}
 #endif
 
 // ---------------------------------------------------------------------------
@@ -120,6 +169,10 @@ EM_JS(void, js_publish_render_metrics, (double mean_ms, double p95_ms), {
 void MainLoopStep() noexcept {
 #ifdef __EMSCRIPTEN__
     const double render_started_ms = emscripten_get_now();
+    if (!g_state.bridge_smoke_sent) {
+        RunBridgeSmokeOnce();
+        g_state.bridge_smoke_sent = true;
+    }
 #endif
     SDL_Event event{};
     while (SDL_PollEvent(&event) != 0) {
