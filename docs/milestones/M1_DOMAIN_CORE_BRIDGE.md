@@ -1,6 +1,6 @@
 # M1 — Domain Core and Bridge Contract
 
-Status: In progress; Slices 1 through 4 implemented
+Status: In progress; Slices 1 through 5 implemented
 Parent specification: `SPECIFICATION.md`, sections 9, 18, 19, and 22  
 Prerequisite: M0 accepted locally at commit `b8582a3`; first remote CI run pending  
 Scope owner: project owner  
@@ -184,8 +184,8 @@ construction/validation tests; no speculative processor behavior is required.
 - [x] Ingress batch and queue memory are bounded and exact-capacity behavior is tested.
 - [x] Accepted, rejected, and dropped counters are observable.
 - [x] Queue overflow cannot leave downstream state labeled `Live` and complete.
-- [ ] Fake-clock replay performs no real sleeping and is deterministic.
-- [ ] A synthetic reference replay feeds the dummy read model/panel seam deterministically.
+- [x] Fake-clock replay performs no real sleeping and is deterministic.
+- [x] A synthetic reference replay feeds the dummy read model/panel seam deterministically.
 - [ ] Native build/tests pass with warnings as errors.
 - [ ] WASM build and browser bridge tests pass.
 - [ ] TypeScript check, formatting, lint, and production build pass.

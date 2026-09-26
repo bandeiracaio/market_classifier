@@ -38,6 +38,8 @@ struct IngressCounters {
     std::uint64_t rejected_events  = 0;
     std::uint64_t dropped_batches  = 0;
     std::uint64_t dropped_events   = 0;
+
+    [[nodiscard]] bool operator==(const IngressCounters &) const noexcept = default;
 };
 
 struct IngressStatus {

@@ -9,6 +9,8 @@ add_library(mc_domain STATIC
     src/domain/types.cpp
     src/runtime/clock.cpp
     src/runtime/ingress.cpp
+    src/runtime/read_model.cpp
+    src/runtime/replay.cpp
 )
 
 target_include_directories(mc_domain PUBLIC
