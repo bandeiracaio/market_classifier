@@ -14,6 +14,7 @@
 		"format": "prettier --write .",
 		"measure:runtime": "node tools/measure-runtime.mjs",
 		"test": "playwright test",
+		"test:bridge": "tsc -p ../../bridge/tsconfig.json && node --test ../../bridge/tests/*.test.mjs",
 		"test:ui": "playwright test --ui"
 	},
 	"dependencies": {

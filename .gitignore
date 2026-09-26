@@ -15,6 +15,7 @@ node_modules/
 # SvelteKit generated
 .svelte-kit/
 apps/web/.svelte-kit/
+bridge/.build/
 
 # Playwright results
 test-results/

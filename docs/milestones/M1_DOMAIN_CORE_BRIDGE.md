@@ -1,6 +1,6 @@
 # M1 — Domain Core and Bridge Contract
 
-Status: In progress; Slice 1 decimal core implemented
+Status: In progress; Slices 1, 2, and 4 implemented
 Parent specification: `SPECIFICATION.md`, sections 9, 18, 19, and 22  
 Prerequisite: M0 accepted locally at commit `b8582a3`; first remote CI run pending  
 Scope owner: project owner  
@@ -178,9 +178,9 @@ construction/validation tests; no speculative processor behavior is required.
 - [x] Normalized identifiers and metadata preserve venue, native symbol, three time/sequence
       concepts, and quality state.
 - [x] All required normalized event contracts are defined without venue JSON coupling.
-- [ ] ADR-0004 is accepted before the final bridge encoding lands.
-- [ ] C++ and TypeScript agree on protocol version, message kinds, limits, and fixture bytes.
-- [ ] Malformed, truncated, oversized, and unsupported bridge messages reject safely.
+- [x] ADR-0004 is accepted before the final bridge encoding lands.
+- [x] C++ and TypeScript agree on protocol version, message kinds, limits, and fixture bytes.
+- [x] Malformed, truncated, oversized, and unsupported bridge messages reject safely.
 - [ ] Ingress batch and queue memory are bounded and exact-capacity behavior is tested.
 - [ ] Accepted, rejected, and dropped counters are observable.
 - [ ] Queue overflow cannot leave downstream state labeled `Live` and complete.
@@ -189,7 +189,7 @@ construction/validation tests; no speculative processor behavior is required.
 - [ ] Native build/tests pass with warnings as errors.
 - [ ] WASM build and browser bridge tests pass.
 - [ ] TypeScript check, formatting, lint, and production build pass.
-- [ ] Performance notes record bridge batch size and decode methodology.
+- [x] Performance notes record bridge batch size and decode methodology.
 - [ ] No exchange, telemetry, authenticated, or deferred-roadmap network request exists.
 - [ ] Review finds no unresolved S0/S1 issue.
 

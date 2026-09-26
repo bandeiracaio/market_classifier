@@ -6,16 +6,18 @@
 // avoid coupling the web host to Emscripten internals.
 
 /** Bridge protocol version — incremented when the JS/WASM contract changes. */
-export const BRIDGE_VERSION = 1 as const;
+import { PROTOCOL_VERSION } from "./protocol";
+
+export const BRIDGE_VERSION = PROTOCOL_VERSION;
 
 /** Terminal lifecycle status visible to the host. */
-export type TerminalLifecycle = 'initializing' | 'ready' | 'error' | 'shutdown';
+export type TerminalLifecycle = "initializing" | "ready" | "error" | "shutdown";
 
 /**
  * Minimal interface the Emscripten glue exposes after MODULARIZE=1 initialization.
  * Extended in M1 with typed message channels.
  */
 export interface TerminalModule {
-	readonly bridgeVersion: typeof BRIDGE_VERSION;
-	lifecycle: TerminalLifecycle;
+  readonly bridgeVersion: typeof BRIDGE_VERSION;
+  lifecycle: TerminalLifecycle;
 }

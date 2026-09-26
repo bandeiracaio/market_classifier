@@ -10,6 +10,7 @@ Use sequential files:
 0001-dependency-acquisition.md
 0002-cpp-test-framework.md
 0003-decimal-representation.md
+0004-bridge-batch-encoding.md
 ```
 
 ## Status values

@@ -117,6 +117,10 @@ jobs:
         working-directory: apps/web
         run: pnpm check
 
+      - name: Bridge contract tests
+        working-directory: apps/web
+        run: pnpm test:bridge
+
       - name: Lint
         working-directory: apps/web
         run: pnpm lint

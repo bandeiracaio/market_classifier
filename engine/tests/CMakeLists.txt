@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.28)
 add_executable(mc_tests
     test_decimal.cpp
     test_domain_contracts.cpp
+    test_bridge_protocol.cpp
     test_version.cpp
 )
 
@@ -14,6 +15,8 @@ target_link_libraries(mc_tests PRIVATE
     Catch2::Catch2WithMain
     mc_domain
 )
+
+target_compile_definitions(mc_tests PRIVATE MC_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(mc_tests PRIVATE

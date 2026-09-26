@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.28)
 # Pure domain library — no UI, platform, Emscripten, or venue dependencies
 # ---------------------------------------------------------------------------
 add_library(mc_domain STATIC
+    src/bridge/protocol.cpp
     src/domain/decimal.cpp
     src/domain/types.cpp
 )
