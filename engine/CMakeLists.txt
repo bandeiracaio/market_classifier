@@ -1,6 +1,27 @@
 cmake_minimum_required(VERSION 3.28)
 
 # ---------------------------------------------------------------------------
+# Pure domain library — no UI, platform, Emscripten, or venue dependencies
+# ---------------------------------------------------------------------------
+add_library(mc_domain STATIC
+    src/domain/decimal.cpp
+)
+
+target_include_directories(mc_domain PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(mc_domain PRIVATE
+        -Wall -Wextra -Wpedantic -Werror -Wno-unused-parameter
+    )
+elseif(MSVC)
+    target_compile_options(mc_domain PRIVATE
+        /W4 /WX /wd4100 /wd4267 /D_CRT_SECURE_NO_WARNINGS
+    )
+endif()
+
+# ---------------------------------------------------------------------------
 # Terminal executable / WASM module
 # ---------------------------------------------------------------------------
 add_executable(market_classifier
@@ -12,6 +33,7 @@ target_include_directories(market_classifier PRIVATE
 )
 
 target_link_libraries(market_classifier PRIVATE
+    mc_domain
     mc_imgui
     mc_implot
 )

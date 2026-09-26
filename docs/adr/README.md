@@ -9,6 +9,7 @@ Use sequential files:
 ```text
 0001-dependency-acquisition.md
 0002-cpp-test-framework.md
+0003-decimal-representation.md
 ```
 
 ## Status values
@@ -48,4 +49,3 @@ Link measurements, experiments, official documentation, and relevant issues.
 ```
 
 Do not use an ADR to bypass product approval or silently expand scope.
-

@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 add_executable(mc_tests
+    test_decimal.cpp
     test_version.cpp
 )
 
@@ -10,6 +11,7 @@ target_include_directories(mc_tests PRIVATE
 
 target_link_libraries(mc_tests PRIVATE
     Catch2::Catch2WithMain
+    mc_domain
 )
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")

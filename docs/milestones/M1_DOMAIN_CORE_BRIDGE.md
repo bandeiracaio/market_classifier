@@ -1,6 +1,6 @@
 # M1 — Domain Core and Bridge Contract
 
-Status: Proposed for owner review  
+Status: In progress; Slice 1 decimal core implemented
 Parent specification: `SPECIFICATION.md`, sections 9, 18, 19, and 22  
 Prerequisite: M0 accepted locally at commit `b8582a3`; first remote CI run pending  
 Scope owner: project owner  
@@ -172,9 +172,9 @@ construction/validation tests; no speculative processor behavior is required.
 
 ## Acceptance checklist
 
-- [ ] ADR-0003 is accepted before decimal implementation lands.
-- [ ] Decimal tests cover normal, boundary, malformed, overflow, and cross-scale cases.
-- [ ] No domain price or quantity uses binary floating point.
+- [x] ADR-0003 is accepted before decimal implementation lands.
+- [x] Decimal tests cover normal, boundary, malformed, overflow, and cross-scale cases.
+- [x] No domain price or quantity uses binary floating point.
 - [ ] Normalized identifiers and metadata preserve venue, native symbol, three time/sequence
       concepts, and quality state.
 - [ ] All required normalized event contracts are defined without venue JSON coupling.
