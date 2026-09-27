@@ -8,7 +8,7 @@ void drain_ingress(BoundedIngress &ingress, DummyReadModel &model) {
     while (auto batch = ingress.consume_next()) {
         for (const auto &event : batch->events) {
             ++model.total_events;
-            ++model.event_counts[event.index()];
+            ++model.event_counts.at(event.index());
             std::visit(
                 [&model](const auto &value) {
                     model.last_local_sequence  = value.meta.local_sequence().value;

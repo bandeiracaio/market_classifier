@@ -56,16 +56,21 @@ RawFrameDecode decode_raw_frames(std::span<const std::uint8_t> bytes) {
         !read_le(bytes, offset, count) || !read_le(bytes, offset, reserved)) {
         return {{}, DecodeError::Truncated};
     }
-    if (version != k_protocol_version)
+    if (version != k_protocol_version) {
         return {{}, DecodeError::UnsupportedVersion};
-    if (kind != static_cast<std::uint8_t>(MessageKind::RawFrameBatch))
+    }
+    if (kind != static_cast<std::uint8_t>(MessageKind::RawFrameBatch)) {
         return {{}, DecodeError::UnknownKind};
-    if (flags != 0 || reserved != 0)
+    }
+    if (flags != 0 || reserved != 0) {
         return {{}, DecodeError::InvalidFlags};
-    if (payload_bytes != bytes.size() - k_header_bytes)
+    }
+    if (payload_bytes != bytes.size() - k_header_bytes) {
         return {{}, DecodeError::InvalidLength};
-    if (count == 0 || count > k_max_frames_per_batch)
+    }
+    if (count == 0 || count > k_max_frames_per_batch) {
         return {{}, DecodeError::InvalidCount};
+    }
 
     RawFrameDecode out;
     out.frames.reserve(count);
@@ -77,21 +82,26 @@ RawFrameDecode decode_raw_frames(std::span<const std::uint8_t> bytes) {
             !read_le(bytes, offset, length)) {
             return {{}, DecodeError::Truncated};
         }
-        if (!venues::is_valid(static_cast<venues::StreamTag>(tag)))
+        if (!venues::is_valid(static_cast<venues::StreamTag>(tag))) {
             return {{}, DecodeError::InvalidEnum};
-        if (length > k_max_raw_frame_bytes)
+        }
+        if (length > k_max_raw_frame_bytes) {
             return {{}, DecodeError::Oversized};
-        if (length == 0)
+        }
+        if (length == 0) {
             return {{}, DecodeError::InvalidLength};
-        if (bytes.size() - offset < length)
+        }
+        if (bytes.size() - offset < length) {
             return {{}, DecodeError::Truncated};
-        const auto *start = reinterpret_cast<const char *>(bytes.data() + offset);
-        out.frames.push_back(
-            {static_cast<venues::StreamTag>(tag), receive_time, std::string(start, length)});
+        }
+        const auto text = bytes.subspan(offset, length);
+        out.frames.push_back({static_cast<venues::StreamTag>(tag), receive_time,
+                              std::string(text.begin(), text.end())});
         offset += length;
     }
-    if (offset != bytes.size())
+    if (offset != bytes.size()) {
         return {{}, DecodeError::InvalidLength};
+    }
     return out;
 }
 

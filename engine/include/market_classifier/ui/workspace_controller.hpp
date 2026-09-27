@@ -47,6 +47,7 @@ class WorkspaceController {
     void capture_active(); // live panels + ini -> active layout (user layouts only)
     void build_preset_dock(unsigned int dockspace_id);
     void menu_bar();
+    void layouts_menu();
     void modals();
 
     Workspace ws_;

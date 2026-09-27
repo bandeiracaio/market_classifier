@@ -12,7 +12,7 @@ constexpr std::size_t k_depth_levels = 400; // per side drawn
 
 class DepthPanel final : public Panel {
   public:
-    PanelKind kind() const override { return PanelKind::Depth; }
+    [[nodiscard]] PanelKind kind() const override { return PanelKind::Depth; }
 
     void draw(const runtime::Engine &engine, PanelSettings &settings) override {
         const auto selection = panel_header(engine, kind(), settings, book_q, feed_age);

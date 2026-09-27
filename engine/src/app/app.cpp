@@ -28,7 +28,7 @@ EM_JS(void, js_request_host_action, (const char *name), {
 });
 // clang-format on
 #else
-void js_request_host_action(const char *) {}
+void js_request_host_action(const char * /*unused*/) {}
 #endif
 
 ui::WorkspaceController &controller() {
@@ -43,8 +43,8 @@ void apply_actions(runtime::Engine &engine) {
     }
     for (const auto v : {domain::Venue::BinanceUsdM, domain::Venue::Hyperliquid}) {
         const auto i = runtime::venue_index(v);
-        engine.set_cvd_daily_reset(v, actions.cvd_daily_reset[i]);
-        if (actions.cvd_reset_now[i]) {
+        engine.set_cvd_daily_reset(v, actions.cvd_daily_reset.at(i));
+        if (actions.cvd_reset_now.at(i)) {
             engine.reset_cvd(v);
         }
     }
@@ -76,16 +76,20 @@ void frame() {
 // Workspace bridge exports (plan Task 10). JSON crosses the boundary as UTF-8.
 // ---------------------------------------------------------------------------
 namespace {
-std::string g_export_buffer; // valid until the next mc_workspace_export call
+// Backing store for the returned C string; valid until the next mc_workspace_export call.
+std::string &export_buffer() {
+    static std::string buffer;
+    return buffer;
 }
+} // namespace
 
 extern "C" const char *mc_workspace_export() noexcept {
     try {
-        g_export_buffer = market_classifier::app::controller().export_json();
+        export_buffer() = market_classifier::app::controller().export_json();
     } catch (...) {
-        g_export_buffer.clear();
+        export_buffer().clear();
     }
-    return g_export_buffer.c_str();
+    return export_buffer().c_str();
 }
 
 // Returns ui::CodecError (0 = applied). Oversize input is rejected before parsing.

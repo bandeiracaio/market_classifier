@@ -55,9 +55,7 @@ std::optional<Document> Document::parse(std::string_view text, std::size_t max_b
     }
     // NUMBER_AS_RAW keeps every number as its source text so prices never pass
     // through double.
-    yyjson_read_err err{};
-    auto *doc = yyjson_read_opts(const_cast<char *>(text.data()), text.size(),
-                                 YYJSON_READ_NUMBER_AS_RAW, nullptr, &err);
+    auto *doc = yyjson_read(text.data(), text.size(), YYJSON_READ_NUMBER_AS_RAW);
     if (doc == nullptr) {
         return std::nullopt;
     }

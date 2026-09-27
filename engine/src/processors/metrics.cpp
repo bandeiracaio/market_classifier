@@ -100,8 +100,8 @@ domain::Decimal annualized_funding(const domain::Decimal &rate, domain::Venue ve
 }
 
 std::int64_t next_hourly_funding_ms(std::int64_t now_ms) noexcept {
-    constexpr std::int64_t hour = 3'600'000;
-    return floor_to_ms(now_ms, hour) + hour;
+    constexpr std::int64_t k_hour = 3'600'000;
+    return floor_to_ms(now_ms, k_hour) + k_hour;
 }
 
 } // namespace market_classifier::processors

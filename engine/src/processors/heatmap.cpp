@@ -58,7 +58,7 @@ void encode_side(const Levels &levels, std::int64_t ref, const domain::Decimal &
 
 double HeatmapColumn::price_of(std::int16_t offset, const domain::Decimal &quantum) const noexcept {
     // (ticks * mantissa) / 10^scale: one correctly rounded division.
-    const double ticks = static_cast<double>(ref_ticks + offset);
+    const auto ticks = static_cast<double>(ref_ticks + offset);
     return ticks * static_cast<double>(quantum.mantissa()) / std::pow(10.0, quantum.scale());
 }
 

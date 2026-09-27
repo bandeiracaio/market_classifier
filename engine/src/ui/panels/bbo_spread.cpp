@@ -10,7 +10,7 @@ using namespace detail;
 
 class BboSpreadPanel final : public Panel {
   public:
-    PanelKind kind() const override { return PanelKind::BboSpread; }
+    [[nodiscard]] PanelKind kind() const override { return PanelKind::BboSpread; }
 
     void draw(const runtime::Engine &engine, PanelSettings &settings) override {
         const auto selection = panel_header(engine, kind(), settings, feed_q, feed_age);

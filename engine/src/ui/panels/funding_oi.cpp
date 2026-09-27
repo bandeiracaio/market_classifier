@@ -12,7 +12,7 @@ using namespace detail;
 
 class FundingOiPanel final : public Panel {
   public:
-    PanelKind kind() const override { return PanelKind::FundingOi; }
+    [[nodiscard]] PanelKind kind() const override { return PanelKind::FundingOi; }
 
     void draw(const runtime::Engine &engine, PanelSettings &settings) override {
         const auto selection = panel_header(engine, kind(), settings, feed_q, feed_age);
@@ -46,7 +46,7 @@ class FundingOiPanel final : public Panel {
             }
         }
         ImPlot::GetStyle().UseLocalTime = !display_prefs().utc_time;
-        const float half                = ImGui::GetContentRegionAvail().y * 0.5f;
+        const float half                = ImGui::GetContentRegionAvail().y * 0.5F;
         plot("##funding", "Funding %", half, engine, venues, true);
         plot("##oi", "OI (BTC)", -1, engine, venues, false);
     }

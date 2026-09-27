@@ -6,15 +6,18 @@
 namespace market_classifier::runtime {
 
 ReplayResult ReplayHarness::run(std::span<const ReplayEntry> entries) {
-    if (entries.empty())
+    if (entries.empty()) {
         return {0, ReplayError::Empty};
-    if (entries.size() > k_max_replay_entries)
+    }
+    if (entries.size() > k_max_replay_entries) {
         return {0, ReplayError::TooManyEntries};
+    }
 
     std::int64_t previous_offset = 0;
     for (const auto &entry : entries) {
-        if (entry.offset_ms < previous_offset)
+        if (entry.offset_ms < previous_offset) {
             return {0, ReplayError::InvalidTimeline};
+        }
         previous_offset = entry.offset_ms;
     }
 

@@ -50,7 +50,7 @@ bool read_levels(Parse &p, const json::Value &obj, std::string_view key,
 class Frame {
   public:
     Frame(const bridge::RawFrame &frame, std::uint64_t &sequence)
-        : frame_(frame), sequence_(sequence) {}
+        : frame_(&frame), sequence_(&sequence) {}
 
     AdapterResult ws(const json::Value &root) {
         std::string_view stream;
@@ -81,7 +81,7 @@ class Frame {
 
     AdapterResult depth_snapshot(const json::Value &root) {
         domain::BookSnapshot s;
-        std::int64_t t = frame_.receive_time_ms;
+        std::int64_t t = frame_->receive_time_ms;
         if (const auto tv = root.get("T")) {
             if (const auto ti = tv->int64(); ti && *ti >= 0) {
                 t = *ti;
@@ -124,9 +124,15 @@ class Frame {
                 const auto c = row->at(k);
                 return c ? c->int64() : std::nullopt;
             };
-            const auto open_time = cell_int(0), close_time = cell_int(6), trades = cell_int(8);
-            const auto o = cell_dec(1), h = cell_dec(2), l = cell_dec(3), c = cell_dec(4),
-                       v = cell_dec(5), q = cell_dec(7);
+            const auto open_time  = cell_int(0);
+            const auto close_time = cell_int(6);
+            const auto trades     = cell_int(8);
+            const auto o          = cell_dec(1);
+            const auto h          = cell_dec(2);
+            const auto l          = cell_dec(3);
+            const auto c          = cell_dec(4);
+            const auto v          = cell_dec(5);
+            const auto q          = cell_dec(7);
             if (!open_time || !close_time || !trades || !o || !h || !l || !c || !v || !q) {
                 p_.fail(AdapterError::Malformed);
                 break;
@@ -195,7 +201,7 @@ class Frame {
     }
 
     std::optional<domain::EventMeta> meta_for(std::int64_t source_time) {
-        return detail::make_meta(p_, k_venue, source_time, frame_.receive_time_ms, sequence_);
+        return detail::make_meta(p_, k_venue, source_time, frame_->receive_time_ms, *sequence_);
     }
 
     AdapterResult finish() {
@@ -242,7 +248,9 @@ class Frame {
     void depth_update(const json::Value &d) {
         domain::BookDelta delta{};
         std::int64_t time{};
-        std::uint64_t first{}, last{}, prev{};
+        std::uint64_t first{};
+        std::uint64_t last{};
+        std::uint64_t prev{};
         if (!symbol_ok(p_, d, "s") || !detail::read_time(p_, d, "T", time) ||
             !detail::read_u64(p_, d, "U", first) || !detail::read_u64(p_, d, "u", last) ||
             !detail::read_u64(p_, d, "pu", prev) || !read_levels(p_, d, "b", delta.changed_bids) ||
@@ -281,7 +289,8 @@ class Frame {
     void mark_price(const json::Value &d) {
         domain::AssetMetrics m{};
         domain::Decimal index{};
-        std::int64_t time{}, next{};
+        std::int64_t time{};
+        std::int64_t next{};
         if (!symbol_ok(p_, d, "s") || !detail::read_price(p_, d, "p", m.mark_price) ||
             !detail::read_price(p_, d, "i", index) ||
             !detail::read_decimal(p_, d, "r", m.funding_rate) ||
@@ -300,7 +309,9 @@ class Frame {
     // so it is comparable with Hyperliquid's notional `dayNtlVlm`.
     void ticker(const json::Value &d) {
         domain::MarketSummary s{};
-        domain::Decimal last{}, change{}, volume{};
+        domain::Decimal last{};
+        domain::Decimal change{};
+        domain::Decimal volume{};
         std::int64_t time{};
         if (!symbol_ok(p_, d, "s") || !detail::read_price(p_, d, "c", last) ||
             !detail::read_decimal(p_, d, "p", change) ||
@@ -412,7 +423,10 @@ class Frame {
 
     void definition(const json::Value &sym) {
         domain::InstrumentDefinition def{};
-        std::string_view contract, status, base, quote;
+        std::string_view contract;
+        std::string_view status;
+        std::string_view base;
+        std::string_view quote;
         const auto filters = sym.get("filters");
         if (!detail::read_string(p_, sym, "contractType", contract) ||
             !detail::read_string(p_, sym, "status", status) ||
@@ -424,7 +438,8 @@ class Frame {
             p_.fail(AdapterError::Malformed);
             return;
         }
-        bool tick = false, step = false;
+        bool tick = false;
+        bool step = false;
         for (std::size_t i = 0; i < filters->size(); ++i) {
             const auto f    = filters->at(i);
             const auto type = f ? f->get("filterType") : std::nullopt;
@@ -445,14 +460,14 @@ class Frame {
         def.base_asset    = std::string(base);
         def.quote_asset   = std::string(quote);
         def.active        = status == "TRADING";
-        if (auto meta = meta_for(frame_.receive_time_ms)) {
+        if (auto meta = meta_for(frame_->receive_time_ms)) {
             def.meta = *meta;
             detail::push(result_, std::move(def));
         }
     }
 
-    const bridge::RawFrame &frame_;
-    std::uint64_t &sequence_;
+    const bridge::RawFrame *frame_; // borrowed for one adapt() call
+    std::uint64_t *sequence_;
     Parse p_;
     AdapterResult result_;
 };

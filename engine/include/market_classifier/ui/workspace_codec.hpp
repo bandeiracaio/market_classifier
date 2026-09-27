@@ -22,7 +22,7 @@ struct DecodedWorkspace {
 // Validates size, schema version, shape and bounds, running migrations up to the current
 // version (docs/runtime/mvp-workspace.md). Never partially applies: on error `value` is
 // the default workspace.
-[[nodiscard]] DecodedWorkspace decode_workspace(std::string_view json);
+[[nodiscard]] DecodedWorkspace decode_workspace(std::string_view text);
 
 [[nodiscard]] std::string_view codec_error_name(CodecError error);
 

@@ -12,7 +12,7 @@ constexpr std::array<const char *, 4> k_bucket_labels{"$1", "$5", "$10", "$25"};
 
 class VolumeProfilePanel final : public Panel {
   public:
-    PanelKind kind() const override { return PanelKind::VolumeProfile; }
+    [[nodiscard]] PanelKind kind() const override { return PanelKind::VolumeProfile; }
 
     void draw(const runtime::Engine &engine, PanelSettings &settings) override {
         const auto selection = panel_header(engine, kind(), settings, feed_q, feed_age);
@@ -25,7 +25,7 @@ class VolumeProfilePanel final : public Panel {
             settings.bucket_index = static_cast<std::uint8_t>(index);
         }
         const auto bucket =
-            domain::Decimal::parse(processors::k_bucket_sizes[static_cast<std::size_t>(index)])
+            domain::Decimal::parse(processors::k_bucket_sizes.at(static_cast<std::size_t>(index)))
                 .value;
         const auto profile = processors::aggregate(
             engine.view(to_venue(selection)).footprint.session_profile(), bucket);
@@ -43,13 +43,13 @@ class VolumeProfilePanel final : public Panel {
                            poc ? text(*poc).c_str() : "-");
         ImGui::BeginChild("profile");
         auto *draw        = ImGui::GetWindowDrawList();
-        const float width = ImGui::GetContentRegionAvail().x - 180.0f;
+        const float width = ImGui::GetContentRegionAvail().x - 180.0F;
         for (std::size_t i = buckets.size(); i-- > 0;) {
             const auto &b     = buckets[i];
             const double sell = num(b.bid_volume);
             const double buy  = num(b.ask_volume);
             const bool is_poc = poc && b.price == *poc;
-            ImGui::TextColored(is_poc ? ImVec4(1, 1, 0.3f, 1) : ImVec4(1, 1, 1, 1), "%s%10s",
+            ImGui::TextColored(is_poc ? ImVec4(1, 1, 0.3F, 1) : ImVec4(1, 1, 1, 1), "%s%10s",
                                is_poc ? "POC " : "    ", text(b.price).c_str());
             ImGui::SameLine(170);
             const auto origin = ImGui::GetCursorScreenPos();

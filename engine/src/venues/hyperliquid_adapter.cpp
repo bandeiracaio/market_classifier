@@ -78,7 +78,7 @@ domain::Decimal pow10_decimal(int exponent) {
 class Frame {
   public:
     Frame(const bridge::RawFrame &frame, std::uint64_t &sequence)
-        : frame_(frame), sequence_(sequence) {}
+        : frame_(&frame), sequence_(&sequence) {}
 
     AdapterResult ws(const json::Value &root) {
         std::string_view channel;
@@ -102,7 +102,7 @@ class Frame {
         } else if (channel == "activeAssetCtx") {
             asset_ctx(*data);
         } else if (channel == "candle") {
-            candle(*data, frame_.receive_time_ms, false);
+            candle(*data, frame_->receive_time_ms, false);
         } else if (channel == "error") {
             p_.fail(AdapterError::Malformed);
         } else {
@@ -123,7 +123,7 @@ class Frame {
                 break;
             }
             // Snapshot is ordered oldest first; only the newest bar may be open.
-            candle(*c, frame_.receive_time_ms, i + 1 < root.size());
+            candle(*c, frame_->receive_time_ms, i + 1 < root.size());
         }
         return finish();
     }
@@ -157,7 +157,7 @@ class Frame {
 
   private:
     std::optional<domain::EventMeta> meta_for(std::int64_t source_time) {
-        return detail::make_meta(p_, k_venue, source_time, frame_.receive_time_ms, sequence_);
+        return detail::make_meta(p_, k_venue, source_time, frame_->receive_time_ms, *sequence_);
     }
 
     AdapterResult finish() {
@@ -280,7 +280,13 @@ class Frame {
             p_.fail(AdapterError::Malformed);
             return;
         }
-        domain::Decimal mark{}, oracle{}, funding{}, oi{}, volume{}, prev{}, mid{};
+        domain::Decimal mark{};
+        domain::Decimal oracle{};
+        domain::Decimal funding{};
+        domain::Decimal oi{};
+        domain::Decimal volume{};
+        domain::Decimal prev{};
+        domain::Decimal mid{};
         if (!detail::read_price(p_, *ctx, "markPx", mark) ||
             !detail::read_price(p_, *ctx, "oraclePx", oracle) ||
             !detail::read_decimal(p_, *ctx, "funding", funding) ||
@@ -303,7 +309,7 @@ class Frame {
             p_.fail(AdapterError::OutOfBounds);
             return;
         }
-        const auto t = frame_.receive_time_ms;
+        const auto t = frame_->receive_time_ms;
         auto m1      = meta_for(t);
         auto m2      = meta_for(t);
         auto m3      = meta_for(t);
@@ -361,7 +367,7 @@ class Frame {
         out.interval_ms = *ms;
         out.trade_count = static_cast<std::uint64_t>(trades);
         // Live frames have no closed flag; a bar is closed once its end has passed.
-        out.closed = closed || out.close_time_ms < frame_.receive_time_ms;
+        out.closed = closed || out.close_time_ms < frame_->receive_time_ms;
         if (auto meta = meta_for(source_time)) {
             out.meta = *meta;
             detail::push(result_, std::move(out));
@@ -390,14 +396,14 @@ class Frame {
         def.quote_asset     = "USDC";
         const auto delisted = universe.get("isDelisted");
         def.active          = !(delisted && delisted->boolean() == true);
-        if (auto meta = meta_for(frame_.receive_time_ms)) {
+        if (auto meta = meta_for(frame_->receive_time_ms)) {
             def.meta = *meta;
             detail::push(result_, std::move(def));
         }
     }
 
-    const bridge::RawFrame &frame_;
-    std::uint64_t &sequence_;
+    const bridge::RawFrame *frame_; // borrowed for one adapt() call
+    std::uint64_t *sequence_;
     Parse p_;
     AdapterResult result_;
 };

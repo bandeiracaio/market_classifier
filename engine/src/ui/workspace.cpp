@@ -61,7 +61,7 @@ bool valid_layout_name(std::string_view name) {
 
 namespace {
 std::uint32_t next_uid(const Workspace &ws) {
-    std::uint32_t uid = static_cast<std::uint32_t>(k_builtin_layout_count);
+    auto uid = static_cast<std::uint32_t>(k_builtin_layout_count);
     for (const auto &l : ws.layouts) {
         uid = std::max(uid, l.uid);
     }

@@ -36,7 +36,7 @@ std::span<const PanelTraits> panel_traits() {
 }
 
 const PanelTraits &traits_of(PanelKind kind) {
-    return k_traits[static_cast<std::size_t>(kind)];
+    return k_traits.at(static_cast<std::size_t>(kind));
 }
 
 VenueSelection effective_venue(PanelKind kind, VenueSelection requested) {
@@ -102,24 +102,24 @@ std::string_view quality_label(domain::DataQuality quality) {
 }
 
 void draw_quality_badge(domain::DataQuality quality, std::int64_t age_ms) {
-    ImVec4 color{0.3f, 0.85f, 0.4f, 1.0f};
+    ImVec4 color{0.3F, 0.85F, 0.4F, 1.0F};
     switch (quality) {
     case domain::DataQuality::Live:
         break;
     case domain::DataQuality::Stale:
     case domain::DataQuality::Delayed:
     case domain::DataQuality::Partial:
-        color = {0.95f, 0.75f, 0.2f, 1.0f};
+        color = {0.95F, 0.75F, 0.2F, 1.0F};
         break;
     case domain::DataQuality::Reconnecting:
     case domain::DataQuality::GapDetected:
-        color = {0.95f, 0.55f, 0.2f, 1.0f};
+        color = {0.95F, 0.55F, 0.2F, 1.0F};
         break;
     case domain::DataQuality::Unsupported:
-        color = {0.6f, 0.6f, 0.65f, 1.0f};
+        color = {0.6F, 0.6F, 0.65F, 1.0F};
         break;
     case domain::DataQuality::Failed:
-        color = {0.95f, 0.3f, 0.3f, 1.0f};
+        color = {0.95F, 0.3F, 0.3F, 1.0F};
         break;
     }
     const auto label = quality_label(quality);
@@ -148,53 +148,55 @@ VenueSelection venue_selector(PanelKind kind, PanelSettings &settings) {
     if (kind == PanelKind::Diagnostics || kind == PanelKind::Overview) {
         return settings.venue;
     }
-    const bool both     = traits_of(kind).supports_both;
-    const char *items[] = {"Binance", "Hyperliquid", "Both"};
-    int current         = static_cast<int>(settings.venue);
+    const bool both = traits_of(kind).supports_both;
+    constexpr std::array<const char *, 3> k_items{"Binance", "Hyperliquid", "Both"};
+    int current = static_cast<int>(settings.venue);
     ImGui::SetNextItemWidth(110);
-    if (ImGui::Combo("##venue", &current, items, both ? 3 : 2)) {
+    if (ImGui::Combo("##venue", &current, k_items.data(), both ? 3 : 2)) {
         settings.venue = static_cast<VenueSelection>(current);
     }
     return settings.venue;
 }
 
 std::string format_time(std::int64_t epoch_ms, bool millis) {
-    const std::time_t seconds = static_cast<std::time_t>(epoch_ms / 1000);
+    const auto seconds = static_cast<std::time_t>(epoch_ms / 1000);
     const std::tm *tm = display_prefs().utc_time ? std::gmtime(&seconds) : std::localtime(&seconds);
-    char buffer[32];
+    std::array<char, 32> buffer{};
     if (tm == nullptr) {
         return "--:--:--";
     }
     if (millis) {
-        std::snprintf(buffer, sizeof buffer, "%02d:%02d:%02d.%03d", tm->tm_hour, tm->tm_min,
+        std::snprintf(buffer.data(), buffer.size(), "%02d:%02d:%02d.%03d", tm->tm_hour, tm->tm_min,
                       tm->tm_sec, static_cast<int>(epoch_ms % 1000));
     } else {
-        std::snprintf(buffer, sizeof buffer, "%02d:%02d:%02d", tm->tm_hour, tm->tm_min, tm->tm_sec);
+        std::snprintf(buffer.data(), buffer.size(), "%02d:%02d:%02d", tm->tm_hour, tm->tm_min,
+                      tm->tm_sec);
     }
-    return buffer;
+    return buffer.data();
 }
 
 std::string format_duration(std::int64_t ms) {
-    char buffer[32];
+    std::array<char, 32> buffer{};
     if (ms < 0) {
         ms = 0;
     }
     if (ms < 60'000) {
-        std::snprintf(buffer, sizeof buffer, "%.1fs", static_cast<double>(ms) / 1000.0);
+        std::snprintf(buffer.data(), buffer.size(), "%.1fs", static_cast<double>(ms) / 1000.0);
     } else if (ms < 3'600'000) {
-        std::snprintf(buffer, sizeof buffer, "%lldm%02llds", static_cast<long long>(ms / 60'000),
-                      static_cast<long long>(ms / 1000 % 60));
+        std::snprintf(buffer.data(), buffer.size(), "%lldm%02llds",
+                      static_cast<long long>(ms / 60'000), static_cast<long long>(ms / 1000 % 60));
     } else {
-        std::snprintf(buffer, sizeof buffer, "%lldh%02lldm", static_cast<long long>(ms / 3'600'000),
+        std::snprintf(buffer.data(), buffer.size(), "%lldh%02lldm",
+                      static_cast<long long>(ms / 3'600'000),
                       static_cast<long long>(ms / 60'000 % 60));
     }
-    return buffer;
+    return buffer.data();
 }
 
 std::string grouped(double value, int decimals) {
-    char raw[64];
-    std::snprintf(raw, sizeof raw, "%.*f", decimals, std::fabs(value));
-    std::string digits(raw);
+    std::array<char, 64> raw{};
+    std::snprintf(raw.data(), raw.size(), "%.*f", decimals, std::fabs(value));
+    std::string digits(raw.data());
     const auto dot      = digits.find('.');
     std::string intpart = digits.substr(0, dot);
     std::string out;

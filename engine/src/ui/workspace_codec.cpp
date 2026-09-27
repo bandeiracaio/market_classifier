@@ -39,9 +39,9 @@ void append_escaped(std::string &out, std::string_view text) {
             break;
         default:
             if (static_cast<unsigned char>(c) < 0x20) {
-                char buffer[8];
-                std::snprintf(buffer, sizeof buffer, "\\u%04x", static_cast<unsigned>(c));
-                out += buffer;
+                std::array<char, 8> buffer{};
+                std::snprintf(buffer.data(), buffer.size(), "\\u%04x", static_cast<unsigned>(c));
+                out += buffer.data();
             } else {
                 out.push_back(c);
             }
@@ -53,9 +53,9 @@ void append_escaped(std::string &out, std::string_view text) {
 // Fixed-point text (Decimal grammar: no exponent) for the min-trade filter; 6 decimals
 // is far below any meaningful USD filter resolution.
 std::string number_text(double value) {
-    char buffer[64];
-    std::snprintf(buffer, sizeof buffer, "%.6f", value);
-    std::string text(buffer);
+    std::array<char, 64> buffer{};
+    std::snprintf(buffer.data(), buffer.size(), "%.6f", value);
+    std::string text(buffer.data());
     while (!text.empty() && text.back() == '0') {
         text.pop_back();
     }
@@ -69,7 +69,7 @@ template <std::size_t N>
 std::optional<std::size_t> index_of(const std::array<std::string_view, N> &names,
                                     std::string_view s) {
     for (std::size_t i = 0; i < N; ++i) {
-        if (names[i] == s) {
+        if (names.at(i) == s) {
             return i;
         }
     }
@@ -142,7 +142,9 @@ bool read_panel(Reader &r, const json::Value &p, PanelInstance &out) {
         }
         s.venue = effective_venue(out.kind, static_cast<VenueSelection>(*index));
     }
-    std::int64_t interval = s.interval_ms, bucket = s.bucket_index, grouping = s.grouping_index;
+    std::int64_t interval = s.interval_ms;
+    std::int64_t bucket   = s.bucket_index;
+    std::int64_t grouping = s.grouping_index;
     if (!read_int(r, p, "intervalMs", 60'000, 86'400'000, interval) ||
         !read_int(r, p, "bucket", 0, 3, bucket) || !read_int(r, p, "grouping", 0, 5, grouping) ||
         !read_bool(r, p, "cvdDailyReset", s.cvd_daily_reset)) {
@@ -157,7 +159,7 @@ bool read_panel(Reader &r, const json::Value &p, PanelInstance &out) {
             return r.fail(CodecError::Malformed);
         }
         const double value = static_cast<double>(d->mantissa()) / std::pow(10.0, d->scale());
-        if (!(value >= 0 && value <= 1e12)) {
+        if (value < 0 || value > 1e12) {
             return r.fail(CodecError::OutOfBounds);
         }
         s.min_trade_usd = value;
@@ -229,10 +231,11 @@ std::string encode_workspace(const Workspace &ws) {
             const auto &p = l.panels[i];
             const auto &s = p.settings;
             out += i == 0 ? "" : ",";
-            out += "{\"id\":" + std::to_string(p.id) + ",\"kind\":\"" +
-                   std::string(k_kind_names[static_cast<std::size_t>(p.kind)]) + "\",\"venue\":\"" +
-                   std::string(k_venue_names[static_cast<std::size_t>(s.venue)]) +
-                   "\",\"intervalMs\":" + std::to_string(s.interval_ms) +
+            out += "{\"id\":" + std::to_string(p.id) + R"(,"kind":")" +
+                   std::string(k_kind_names.at(static_cast<std::size_t>(p.kind))) +
+                   R"(","venue":")" +
+                   std::string(k_venue_names.at(static_cast<std::size_t>(s.venue))) +
+                   R"(","intervalMs":)" + std::to_string(s.interval_ms) +
                    ",\"bucket\":" + std::to_string(s.bucket_index) +
                    ",\"grouping\":" + std::to_string(s.grouping_index) +
                    ",\"minTradeUsd\":" + number_text(s.min_trade_usd) +

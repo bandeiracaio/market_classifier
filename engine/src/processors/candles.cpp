@@ -7,7 +7,7 @@ namespace {
 
 std::optional<std::size_t> slot(std::int64_t interval_ms) {
     for (std::size_t i = 0; i < k_candle_intervals_ms.size(); ++i) {
-        if (k_candle_intervals_ms[i] == interval_ms) {
+        if (k_candle_intervals_ms.at(i) == interval_ms) {
             return i;
         }
     }
@@ -28,7 +28,7 @@ void CandleSeries::on_candle(const domain::Candle &candle) {
         ++rejected_;
         return;
     }
-    auto &series    = series_[*index];
+    auto &series    = series_.at(*index);
     last_update_ms_ = std::max(last_update_ms_, candle.meta.source_time().value);
     if (series.empty() || series.back().open_time_ms < candle.open_time_ms) {
         series.push_back(candle);
@@ -57,7 +57,7 @@ std::span<const domain::Candle> CandleSeries::candles(std::int64_t interval_ms) 
     if (!index) {
         return {};
     }
-    return series_[*index];
+    return series_.at(*index);
 }
 
 } // namespace market_classifier::processors

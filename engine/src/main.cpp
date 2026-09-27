@@ -51,11 +51,13 @@
 
 namespace {
 
-constexpr int k_timing_warmup_frames = 30;
 constexpr int k_timing_sample_frames = 120;
+#ifdef __EMSCRIPTEN__
+constexpr int k_timing_warmup_frames = 30;
+#endif
 
 // ---------------------------------------------------------------------------
-// Application state — struct kept here so MainLoopStep can be a plain function
+// Application state — struct kept here so main_loop_step can be a plain function
 // pointer as required by emscripten_set_main_loop.
 // ---------------------------------------------------------------------------
 struct AppState {
@@ -70,7 +72,12 @@ struct AppState {
     int render_sample_count = 0;
 };
 
-AppState g_state{};
+// emscripten_set_main_loop takes a plain function pointer, so the loop state lives behind
+// a function-local static rather than a mutable global.
+AppState &state() {
+    static AppState instance{};
+    return instance;
+}
 
 // ---------------------------------------------------------------------------
 // JS signals — set data attributes readable by Playwright smoke tests.
@@ -128,23 +135,23 @@ void RunBridgeSmokeOnce() {
 // ---------------------------------------------------------------------------
 // Main loop step — must be a plain void() function for emscripten_set_main_loop.
 // ---------------------------------------------------------------------------
-void MainLoopStep() noexcept {
+void main_loop_step() noexcept {
 #ifdef __EMSCRIPTEN__
     const double render_started_ms = emscripten_get_now();
-    if (!g_state.bridge_smoke_sent) {
+    if (!state().bridge_smoke_sent) {
         RunBridgeSmokeOnce();
-        g_state.bridge_smoke_sent = true;
+        state().bridge_smoke_sent = true;
     }
 #endif
     SDL_Event event{};
     while (SDL_PollEvent(&event) != 0) {
         ImGui_ImplSDL2_ProcessEvent(&event);
         if (event.type == SDL_QUIT) {
-            g_state.done = true;
+            state().done = true;
         }
         if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE &&
-            event.window.windowID == SDL_GetWindowID(g_state.window)) {
-            g_state.done = true;
+            event.window.windowID == SDL_GetWindowID(state().window)) {
+            state().done = true;
         }
     }
 
@@ -159,39 +166,39 @@ void MainLoopStep() noexcept {
     ImGui::Render();
     ImGuiIO &io = ImGui::GetIO();
     glViewport(0, 0, static_cast<int>(io.DisplaySize.x), static_cast<int>(io.DisplaySize.y));
-    glClearColor(0.12f, 0.12f, 0.13f, 1.0f);
+    glClearColor(0.12F, 0.12F, 0.13F, 1.0F);
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    SDL_GL_SwapWindow(g_state.window);
+    SDL_GL_SwapWindow(state().window);
 
-    ++g_state.frame;
+    ++state().frame;
 
 #ifdef __EMSCRIPTEN__
-    if (g_state.frame > k_timing_warmup_frames &&
-        g_state.render_sample_count < k_timing_sample_frames) {
-        g_state.render_ms[static_cast<std::size_t>(g_state.render_sample_count)] =
+    if (state().frame > k_timing_warmup_frames &&
+        state().render_sample_count < k_timing_sample_frames) {
+        state().render_ms[static_cast<std::size_t>(state().render_sample_count)] =
             emscripten_get_now() - render_started_ms;
-        ++g_state.render_sample_count;
+        ++state().render_sample_count;
     }
 
-    if (!g_state.metrics_sent && g_state.render_sample_count == k_timing_sample_frames) {
-        auto sorted_samples = g_state.render_ms;
+    if (!state().metrics_sent && state().render_sample_count == k_timing_sample_frames) {
+        auto sorted_samples = state().render_ms;
         std::sort(sorted_samples.begin(), sorted_samples.end());
 
         double total_ms = 0.0;
-        for (const double sample_ms : g_state.render_ms) {
+        for (const double sample_ms : state().render_ms) {
             total_ms += sample_ms;
         }
 
         constexpr std::size_t p95_index =
             static_cast<std::size_t>(k_timing_sample_frames * 95 / 100) - 1;
         js_publish_render_metrics(total_ms / k_timing_sample_frames, sorted_samples[p95_index]);
-        g_state.metrics_sent = true;
+        state().metrics_sent = true;
     }
 
-    if (!g_state.ready_sent) {
+    if (!state().ready_sent) {
         js_set_wasm_ready();
-        g_state.ready_sent = true;
+        state().ready_sent = true;
     }
     js_increment_frame_count();
 #endif
@@ -231,26 +238,27 @@ int main(int /*argc*/, char * /*argv*/[]) {
     const char *glsl_version = "#version 330 core";
 #endif
 
-    constexpr SDL_WindowFlags window_flags = static_cast<SDL_WindowFlags>(
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    // Plain Uint32: SDL_CreateWindow takes OR-ed flags, which are not a single enumerator.
+    constexpr Uint32 k_window_flags =
+        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
 
-    g_state.window = SDL_CreateWindow("Market Classifier", SDL_WINDOWPOS_CENTERED,
-                                      SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
-    if (g_state.window == nullptr) {
+    state().window = SDL_CreateWindow("Market Classifier", SDL_WINDOWPOS_CENTERED,
+                                      SDL_WINDOWPOS_CENTERED, 1280, 720, k_window_flags);
+    if (state().window == nullptr) {
         std::fprintf(stderr, "SDL_CreateWindow error: %s\n", SDL_GetError());
         SDL_Quit();
         return 1;
     }
 
-    g_state.gl_context = SDL_GL_CreateContext(g_state.window);
-    if (g_state.gl_context == nullptr) {
+    state().gl_context = SDL_GL_CreateContext(state().window);
+    if (state().gl_context == nullptr) {
         std::fprintf(stderr, "SDL_GL_CreateContext error: %s\n", SDL_GetError());
-        SDL_DestroyWindow(g_state.window);
+        SDL_DestroyWindow(state().window);
         SDL_Quit();
         return 1;
     }
 
-    SDL_GL_MakeCurrent(g_state.window, g_state.gl_context);
+    SDL_GL_MakeCurrent(state().window, state().gl_context);
     SDL_GL_SetSwapInterval(1); // vsync
 
     IMGUI_CHECKVERSION();
@@ -264,26 +272,26 @@ int main(int /*argc*/, char * /*argv*/[]) {
 
     ImGui::StyleColorsDark();
 
-    ImGui_ImplSDL2_InitForOpenGL(g_state.window, g_state.gl_context);
+    ImGui_ImplSDL2_InitForOpenGL(state().window, state().gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
     market_classifier::app::init();
 
 #ifdef __EMSCRIPTEN__
     // Browser requires a non-blocking loop driven by requestAnimationFrame.
     // 0 fps = use browser's own frame scheduling.
-    emscripten_set_main_loop(MainLoopStep, 0, true);
+    emscripten_set_main_loop(main_loop_step, 0, true);
     // Execution does not return past this point in WASM.
 #else
-    while (!g_state.done) {
-        MainLoopStep();
+    while (!state().done) {
+        main_loop_step();
     }
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
-    SDL_GL_DeleteContext(g_state.gl_context);
-    SDL_DestroyWindow(g_state.window);
+    SDL_GL_DeleteContext(state().gl_context);
+    SDL_DestroyWindow(state().window);
     SDL_Quit();
 #endif
 

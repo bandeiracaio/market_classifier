@@ -21,13 +21,13 @@ domain::Decimal bucket_selector(PanelSettings &settings) {
                      static_cast<int>(k_bucket_labels.size()))) {
         settings.bucket_index = static_cast<std::uint8_t>(index);
     }
-    const auto text_value = processors::k_bucket_sizes[static_cast<std::size_t>(index)];
+    const auto text_value = processors::k_bucket_sizes.at(static_cast<std::size_t>(index));
     return domain::Decimal::parse(text_value).value;
 }
 
 class FootprintPanel final : public Panel {
   public:
-    PanelKind kind() const override { return PanelKind::Footprint; }
+    [[nodiscard]] PanelKind kind() const override { return PanelKind::Footprint; }
 
     void draw(const runtime::Engine &engine, PanelSettings &settings) override {
         const auto selection = panel_header(engine, kind(), settings, feed_q, feed_age);

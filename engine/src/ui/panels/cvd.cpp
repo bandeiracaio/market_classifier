@@ -12,7 +12,7 @@ using namespace detail;
 
 class CvdPanel final : public Panel {
   public:
-    PanelKind kind() const override { return PanelKind::Cvd; }
+    [[nodiscard]] PanelKind kind() const override { return PanelKind::Cvd; }
 
     void draw(const runtime::Engine &engine, PanelSettings &settings) override {
         const auto selection = panel_header(engine, kind(), settings, feed_q, feed_age);
@@ -20,7 +20,7 @@ class CvdPanel final : public Panel {
         ImGui::Checkbox("reset 00:00 UTC", &settings.cvd_daily_reset);
         const auto venues = venues_of(kind(), selection);
         for (const auto v : venues) {
-            ui_actions().cvd_daily_reset[runtime::venue_index(v)] |= settings.cvd_daily_reset;
+            ui_actions().cvd_daily_reset.at(runtime::venue_index(v)) |= settings.cvd_daily_reset;
             const auto &cvd = engine.view(v).cvd;
             ImGui::TextColored(venue_color(v), "%s CVD %s BTC%s%s", venue_name(v),
                                text(cvd.value()).c_str(),

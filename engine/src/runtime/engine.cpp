@@ -20,7 +20,7 @@ VenueProcessors::VenueProcessors(domain::Decimal heatmap_quantum)
 
 Engine::Engine(const Clock &clock)
     // Distinct fixed seeds keep per-venue jitter deterministic and uncorrelated.
-    : clock_(clock), venues_{Venue{0x42u}, Venue{0x4Cu}},
+    : clock_(clock), venues_{Venue{0x42U}, Venue{0x4CU}},
       processors_{VenueProcessors{k_binance_quantum}, VenueProcessors{k_hyperliquid_quantum}} {}
 
 RawSubmit Engine::submit_raw(std::span<const std::uint8_t> bytes) {
@@ -32,7 +32,7 @@ RawSubmit Engine::submit_raw(std::span<const std::uint8_t> bytes) {
     bool dropped   = false;
     const auto now = now_ms();
     for (auto &frame : decoded.frames) {
-        auto &venue = venues_[venue_index(venue_of(frame.tag))];
+        auto &venue = venues_.at(venue_index(venue_of(frame.tag)));
         ++venue.counters.frames_received;
         venue.feed.on_message(now);
         // Bounded queue: evict oldest until the new frame fits (drop-oldest policy,
@@ -53,9 +53,9 @@ RawSubmit Engine::submit_raw(std::span<const std::uint8_t> bytes) {
 }
 
 void Engine::mark_gap(domain::Venue v) {
-    venues_[venue_index(v)].gap = true;
-    auto &p                     = processors_[venue_index(v)];
-    const auto t                = wall_ms();
+    venues_.at(venue_index(v)).gap = true;
+    auto &p                        = processors_.at(venue_index(v));
+    const auto t                   = wall_ms();
     p.cvd.mark_gap(t);
     p.footprint.mark_gap(t);
     p.candles.mark_gap(t);
@@ -73,7 +73,7 @@ void Engine::sample_book(domain::Venue v, std::int64_t t_ms) {
 }
 
 void Engine::process(domain::Venue v, const domain::NormalizedEvent &event) {
-    auto &p = processors_[venue_index(v)];
+    auto &p = processors_.at(venue_index(v));
     std::visit(
         [&](const auto &e) {
             using E = std::decay_t<decltype(e)>;
@@ -105,7 +105,7 @@ void Engine::process(domain::Venue v, const domain::NormalizedEvent &event) {
 }
 
 domain::DataQuality Engine::feed_quality(domain::Venue v) const {
-    return venues_[venue_index(v)].feed.quality();
+    return venues_.at(venue_index(v)).feed.quality();
 }
 
 domain::DataQuality Engine::book_quality(domain::Venue v) const {
@@ -141,15 +141,15 @@ std::optional<processors::BasisView> Engine::basis() const {
 }
 
 void Engine::set_cvd_daily_reset(domain::Venue v, bool enabled) {
-    processors_[venue_index(v)].cvd.daily_reset_enabled = enabled;
+    processors_.at(venue_index(v)).cvd.daily_reset_enabled = enabled;
 }
 
 void Engine::reset_cvd(domain::Venue v) {
-    processors_[venue_index(v)].cvd.reset();
+    processors_.at(venue_index(v)).cvd.reset();
 }
 
 void Engine::on_socket_event(domain::Venue v, SocketEvent kind) {
-    auto &venue    = venues_[venue_index(v)];
+    auto &venue    = venues_.at(venue_index(v));
     const auto now = now_ms();
     switch (kind) {
     case SocketEvent::Open:
@@ -175,15 +175,15 @@ void Engine::on_socket_event(domain::Venue v, SocketEvent kind) {
 }
 
 void Engine::on_metadata_failed(domain::Venue v) {
-    venues_[venue_index(v)].feed.fail();
+    venues_.at(venue_index(v)).feed.fail();
 }
 
 void Engine::retry(domain::Venue v) {
-    venues_[venue_index(v)].feed.retry(now_ms());
+    venues_.at(venue_index(v)).feed.retry(now_ms());
 }
 
 bool Engine::should_reconnect(domain::Venue v) {
-    auto &venue    = venues_[venue_index(v)];
+    auto &venue    = venues_.at(venue_index(v));
     const auto now = now_ms();
     if (!venue.feed.should_reconnect(now)) {
         return false;
@@ -193,14 +193,14 @@ bool Engine::should_reconnect(domain::Venue v) {
 }
 
 bool Engine::take_snapshot_request(domain::Venue v) {
-    auto &venue              = venues_[venue_index(v)];
+    auto &venue              = venues_.at(venue_index(v));
     const bool wanted        = venue.snapshot_requested;
     venue.snapshot_requested = false;
     return wanted;
 }
 
 void Engine::dispatch(domain::Venue v, const venues::AdapterResult &result) {
-    auto &venue = venues_[venue_index(v)];
+    auto &venue = venues_.at(venue_index(v));
     for (std::size_t i = 0; i < result.events.size(); ++i) {
         const auto &event = result.events[i];
         std::visit(
@@ -239,7 +239,7 @@ void Engine::frame(std::int64_t budget_ms) {
     while (progressed && processed < k_max_frames_per_drain && now_ms() - start <= budget_ms) {
         progressed = false;
         for (std::size_t vi = 0; vi < k_venue_count && processed < k_max_frames_per_drain; ++vi) {
-            auto &venue = venues_[vi];
+            auto &venue = venues_.at(vi);
             if (venue.queue.empty()) {
                 continue;
             }
@@ -252,7 +252,7 @@ void Engine::frame(std::int64_t budget_ms) {
             const auto result = v == domain::Venue::BinanceUsdM ? binance_adapter_.adapt(frame)
                                                                 : hyperliquid_adapter_.adapt(frame);
             if (result.error != venues::AdapterError::None) {
-                ++venue.counters.adapter_errors[static_cast<std::size_t>(result.error)];
+                ++venue.counters.adapter_errors.at(static_cast<std::size_t>(result.error));
                 continue;
             }
             ++venue.counters.frames_adapted;

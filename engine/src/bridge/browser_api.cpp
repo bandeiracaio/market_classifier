@@ -44,7 +44,7 @@ extern "C" int mc_bridge_decode(const std::uint8_t *bytes, std::size_t size) noe
     }
     try {
         const std::span<const std::uint8_t> input{bytes, size};
-        if (size > 6 && bytes[6] == static_cast<std::uint8_t>(
+        if (size > 6 && input[6] == static_cast<std::uint8_t>(
                                         market_classifier::bridge::MessageKind::RawFrameBatch)) {
             return static_cast<int>(market_classifier::bridge::decode_raw_frames(input).error);
         }

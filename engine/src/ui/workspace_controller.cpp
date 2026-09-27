@@ -20,20 +20,21 @@ std::string dockspace_name(std::uint32_t uid) {
 // node tree. ImGui serializes every window/node of the session; without this filter a
 // layout's ini would grow with every other layout ever opened.
 std::string filter_ini(const std::string &ini, std::uint32_t uid, ImGuiID dockspace) {
-    char dock_hex[16];
-    std::snprintf(dock_hex, sizeof dock_hex, "ID=0x%08X", dockspace);
+    std::array<char, 16> dock_hex{};
+    std::snprintf(dock_hex.data(), dock_hex.size(), "ID=0x%08X", dockspace);
     // ImGui saves "Title###id" windows under the "###" identity only: "[Window][L<uid>_<n>]".
     const std::string window_tag = "[Window][L" + std::to_string(uid) + "_";
     std::istringstream in(ini);
-    std::string out, line;
-    enum class Section { Skip, Window, Docking } section = Section::Skip;
-    bool in_our_dock                                     = false;
+    std::string out;
+    std::string line;
+    enum class Section : std::uint8_t { Skip, Window, Docking } section = Section::Skip;
+    bool in_our_dock                                                    = false;
     while (std::getline(in, line)) {
         if (!line.empty() && line.back() == '\r') {
             line.pop_back();
         }
-        if (line.rfind("[Window][", 0) == 0) {
-            section = line.rfind(window_tag, 0) == 0 ? Section::Window : Section::Skip;
+        if (line.starts_with("[Window][")) {
+            section = line.starts_with(window_tag) ? Section::Window : Section::Skip;
         } else if (line == "[Docking][Data]") {
             section = Section::Docking;
             out += line + "\n";
@@ -44,8 +45,8 @@ std::string filter_ini(const std::string &ini, std::uint32_t uid, ImGuiID docksp
         if (section == Section::Window) {
             out += line + "\n";
         } else if (section == Section::Docking && !line.empty()) {
-            if (line.rfind("DockSpace", 0) == 0) {
-                in_our_dock = line.find(dock_hex) != std::string::npos;
+            if (line.starts_with("DockSpace")) {
+                in_our_dock = line.find(dock_hex.data()) != std::string::npos;
             } else if (line.front() != ' ') {
                 in_our_dock = false;
             }
@@ -123,15 +124,17 @@ void WorkspaceController::build_preset_dock(ImGuiID dockspace_id) {
     if (panels.size() == 1) {
         ImGui::DockBuilderDockWindow(panels[0].window_name().c_str(), dockspace_id);
     } else if (!panels.empty()) {
-        ImGuiID left = 0, right = 0;
-        ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.62f, &left, &right);
+        ImGuiID left  = 0;
+        ImGuiID right = 0;
+        ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.62F, &left, &right);
         ImGui::DockBuilderDockWindow(panels[0].window_name().c_str(), left);
         const std::size_t rest = panels.size() - 1;
         ImGuiID remaining      = right;
         for (std::size_t i = 1; i < panels.size(); ++i) {
-            ImGuiID top = remaining, bottom = 0;
+            ImGuiID top    = remaining;
+            ImGuiID bottom = 0;
             if (i < panels.size() - 1) {
-                const float share = 1.0f / static_cast<float>(rest - (i - 1));
+                const float share = 1.0F / static_cast<float>(rest - (i - 1));
                 ImGui::DockBuilderSplitNode(remaining, ImGuiDir_Up, share, &top, &bottom);
             }
             ImGui::DockBuilderDockWindow(panels[i].window_name().c_str(), top);
@@ -141,39 +144,38 @@ void WorkspaceController::build_preset_dock(ImGuiID dockspace_id) {
     ImGui::DockBuilderFinish(dockspace_id);
 }
 
+void WorkspaceController::layouts_menu() {
+    if (!ImGui::BeginMenu("Layouts")) {
+        return;
+    }
+    for (std::size_t i = 0; i < ws_.layouts.size(); ++i) {
+        const auto &l = ws_.layouts[i];
+        const auto label =
+            l.name + (l.builtin ? "  (preset)" : "") + "##layout" + std::to_string(l.uid);
+        if (ImGui::MenuItem(label.c_str(), nullptr, i == ws_.active)) {
+            activate(i);
+        }
+    }
+    ImGui::Separator();
+    const bool user = !ws_.layouts[ws_.active].builtin;
+    open_save_as_   = ImGui::MenuItem("Save as...") || open_save_as_;
+    open_rename_    = ImGui::MenuItem("Rename...", nullptr, false, user) || open_rename_;
+    if (ImGui::MenuItem("Duplicate")) {
+        duplicate_active();
+    }
+    if (ImGui::MenuItem("Delete", nullptr, false, user)) {
+        delete_active();
+    }
+    ImGui::Separator();
+    open_reset_ = ImGui::MenuItem("Reset workspace...") || open_reset_;
+    ImGui::EndMenu();
+}
+
 void WorkspaceController::menu_bar() {
     if (!ImGui::BeginMenuBar()) {
         return;
     }
-    if (ImGui::BeginMenu("Layouts")) {
-        for (std::size_t i = 0; i < ws_.layouts.size(); ++i) {
-            const auto &l = ws_.layouts[i];
-            const auto label =
-                l.name + (l.builtin ? "  (preset)" : "") + "##layout" + std::to_string(l.uid);
-            if (ImGui::MenuItem(label.c_str(), nullptr, i == ws_.active)) {
-                activate(i);
-            }
-        }
-        ImGui::Separator();
-        const bool user = !ws_.layouts[ws_.active].builtin;
-        if (ImGui::MenuItem("Save as...")) {
-            open_save_as_ = true;
-        }
-        if (ImGui::MenuItem("Rename...", nullptr, false, user)) {
-            open_rename_ = true;
-        }
-        if (ImGui::MenuItem("Duplicate")) {
-            duplicate_active();
-        }
-        if (ImGui::MenuItem("Delete", nullptr, false, user)) {
-            delete_active();
-        }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Reset workspace...")) {
-            open_reset_ = true;
-        }
-        ImGui::EndMenu();
-    }
+    layouts_menu();
     if (ImGui::BeginMenu("Panels")) {
         for (const auto &t : panel_traits()) {
             if (ImGui::MenuItem(std::string(t.title).c_str()) && host_.add(t.kind) != 0) {
@@ -183,9 +185,7 @@ void WorkspaceController::menu_bar() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("View")) {
-        if (ImGui::MenuItem("UTC time", nullptr, &ws_.utc_time)) {
-            dirty_ = true;
-        }
+        dirty_ = ImGui::MenuItem("UTC time", nullptr, &ws_.utc_time) || dirty_;
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("File")) {
@@ -248,15 +248,15 @@ void WorkspaceController::frame(const runtime::Engine &engine) {
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::SetNextWindowViewport(viewport->ID);
-    constexpr ImGuiWindowFlags flags =
+    constexpr ImGuiWindowFlags k_root_flags =
         ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoSavedSettings;
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::Begin("##dockspace_root", nullptr, flags);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0F);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0F);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0F, 0.0F));
+    ImGui::Begin("##dockspace_root", nullptr, k_root_flags);
     ImGui::PopStyleVar(3);
     menu_bar();
     const ImGuiID dockspace_id = ImGui::GetID(dockspace_name(layout.uid).c_str());
@@ -265,7 +265,7 @@ void WorkspaceController::frame(const runtime::Engine &engine) {
         build_preset_dock(dockspace_id);
         pending_dock_ = false;
     }
-    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+    ImGui::DockSpace(dockspace_id, ImVec2(0.0F, 0.0F), ImGuiDockNodeFlags_PassthruCentralNode);
     modals();
     ImGui::End();
 

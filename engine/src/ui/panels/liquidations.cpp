@@ -12,7 +12,7 @@ constexpr std::size_t k_rows = 100;
 
 class LiquidationsPanel final : public Panel {
   public:
-    PanelKind kind() const override { return PanelKind::Liquidations; }
+    [[nodiscard]] PanelKind kind() const override { return PanelKind::Liquidations; }
 
     void draw(const runtime::Engine &engine, PanelSettings &settings) override {
         const auto selection = panel_header(engine, kind(), settings, liq_q, feed_age);

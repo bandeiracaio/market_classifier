@@ -10,18 +10,126 @@ constexpr std::array<const char *, 5> k_phase_names{"Connecting", "Live", "Stale
                                                     "Failed"};
 constexpr std::array<const char *, 6> k_error_names{
     "none", "malformed", "wrong symbol", "out of bounds", "unknown stream", "ignored"};
+constexpr std::array<domain::Venue, 2> k_venues{domain::Venue::BinanceUsdM,
+                                                domain::Venue::Hyperliquid};
+constexpr std::int64_t k_rate_window_ms = 1000;
 
-// Per-venue runtime health (packet §9). Rates are computed from counter deltas over ~1 s.
+// Message rate from counter deltas over >= 1 s windows.
+struct RateMeter {
+    std::int64_t sample_at     = 0;
+    std::uint64_t sample_count = 0;
+    double rate                = 0;
+
+    double update(std::int64_t now, std::uint64_t count) {
+        if (now - sample_at >= k_rate_window_ms) {
+            rate         = sample_at == 0 ? 0
+                                          : static_cast<double>(count - sample_count) * 1000.0 /
+                                        static_cast<double>(now - sample_at);
+            sample_at    = now;
+            sample_count = count;
+        }
+        return rate;
+    }
+};
+
+struct Context {
+    const runtime::Engine *engine_ptr; // borrowed for one draw call
+    [[nodiscard]] const runtime::Engine &engine() const { return *engine_ptr; }
+    std::int64_t now;
+    std::array<double, 2> rates;
+};
+
+using Cell = void (*)(const Context &, domain::Venue, std::size_t);
+
+void u64(std::uint64_t value) {
+    ImGui::Text("%llu", static_cast<unsigned long long>(value));
+}
+
+void state_cell(const Context &c, domain::Venue v, std::size_t /*unused*/) {
+    const auto &feed = c.engine().feed(v);
+    ImGui::Text("%s", k_phase_names.at(static_cast<std::size_t>(feed.phase())));
+    ImGui::SameLine();
+    draw_quality_badge(c.engine().feed_quality(v), feed.age_ms(c.now));
+    if (feed.phase() == runtime::FeedPhase::Failed) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Retry")) {
+            ui_actions().retry_venue = v;
+        }
+    }
+}
+
+void rejected_cell(const Context &c, domain::Venue v, std::size_t /*unused*/) {
+    const auto &errors = c.engine().counters(v).adapter_errors;
+    bool any           = false;
+    for (std::size_t k = 1; k < errors.size(); ++k) {
+        if (errors.at(k) > 0) {
+            ImGui::Text("%s: %llu", k_error_names.at(k),
+                        static_cast<unsigned long long>(errors.at(k)));
+            any = true;
+        }
+    }
+    if (!any) {
+        ImGui::TextUnformatted("0");
+    }
+}
+
+void book_cell(const Context &c, domain::Venue v, std::size_t /*unused*/) {
+    draw_quality_badge(c.engine().book_quality(v), 0);
+    if (v == domain::Venue::BinanceUsdM) {
+        ImGui::SameLine();
+        ImGui::Text("resyncs %llu",
+                    static_cast<unsigned long long>(c.engine().binance_book().resync_count()));
+    }
+}
+
+struct Row {
+    const char *label;
+    Cell cell;
+};
+
+const std::array<Row, 11> k_rows{{
+    {"State", state_cell},
+    {"Reconnect attempt", [](const Context &c, domain::Venue v,
+                             std::size_t) { ImGui::Text("%u", c.engine().feed(v).attempt()); }},
+    {"Last event age",
+     [](const Context &c, domain::Venue v, std::size_t) {
+         ImGui::TextUnformatted(format_duration(c.engine().feed(v).age_ms(c.now)).c_str());
+     }},
+    {"Messages / s",
+     [](const Context &c, domain::Venue, std::size_t i) { ImGui::Text("%.1f", c.rates.at(i)); }},
+    {"Frames received", [](const Context &c, domain::Venue v,
+                           std::size_t) { u64(c.engine().counters(v).frames_received); }},
+    {"Events",
+     [](const Context &c, domain::Venue v, std::size_t) { u64(c.engine().counters(v).events); }},
+    {"Queue depth",
+     [](const Context &c, domain::Venue v, std::size_t) {
+         ImGui::Text("%zu frames / %zu KiB", c.engine().queued_frames(v),
+                     c.engine().queued_bytes(v) / 1024);
+     }},
+    {"Dropped frames", [](const Context &c, domain::Venue v,
+                          std::size_t) { u64(c.engine().counters(v).frames_dropped); }},
+    {"Reconnects", [](const Context &c, domain::Venue v,
+                      std::size_t) { u64(c.engine().counters(v).reconnects); }},
+    {"Rejected frames", rejected_cell},
+    {"Book", book_cell},
+}};
+
+// Per-venue runtime health (packet §9): state, rates, queue depth, drops, reconnects, last
+// event age, rejected frames, and frame time.
 class DiagnosticsPanel final : public Panel {
   public:
-    PanelKind kind() const override { return PanelKind::Diagnostics; }
+    [[nodiscard]] PanelKind kind() const override { return PanelKind::Diagnostics; }
 
-    void draw(const runtime::Engine &engine, PanelSettings &) override {
-        const auto now = engine.now_ms();
+    void draw(const runtime::Engine &engine, PanelSettings & /*settings*/) override {
         const auto &io = ImGui::GetIO();
         ImGui::Text("Frame %.2f ms (%.0f fps)  rejected batches %llu",
-                    1000.0 / std::max(io.Framerate, 1.0f), io.Framerate,
+                    1000.0 / std::max(io.Framerate, 1.0F), io.Framerate,
                     static_cast<unsigned long long>(engine.rejected_batches()));
+        Context context{&engine, engine.now_ms(), {}};
+        for (std::size_t i = 0; i < k_venues.size(); ++i) {
+            context.rates.at(i) =
+                meters_.at(i).update(context.now, engine.counters(k_venues.at(i)).frames_received);
+        }
         if (!ImGui::BeginTable("diag", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg)) {
             return;
         }
@@ -29,96 +137,22 @@ class DiagnosticsPanel final : public Panel {
         ImGui::TableSetupColumn("Binance");
         ImGui::TableSetupColumn("Hyperliquid");
         ImGui::TableHeadersRow();
-        std::array<double, 2> rate{};
-        for (std::size_t i = 0; i < 2; ++i) {
-            const auto v        = i == 0 ? domain::Venue::BinanceUsdM : domain::Venue::Hyperliquid;
-            const auto received = engine.counters(v).frames_received;
-            if (now - sample_at_[i] >= 1000) {
-                rate_[i]         = sample_at_[i] == 0
-                                       ? 0
-                                       : static_cast<double>(received - sample_count_[i]) * 1000.0 /
-                                     static_cast<double>(now - sample_at_[i]);
-                sample_at_[i]    = now;
-                sample_count_[i] = received;
-            }
-            rate[i] = rate_[i];
-        }
-        const auto row = [&](const char *label, auto &&cell) {
+        for (const auto &row : k_rows) {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
-            ImGui::TextUnformatted(label);
-            for (int i = 0; i < 2; ++i) {
-                ImGui::TableSetColumnIndex(i + 1);
-                ImGui::PushID(i);
-                cell(i == 0 ? domain::Venue::BinanceUsdM : domain::Venue::Hyperliquid,
-                     static_cast<std::size_t>(i));
+            ImGui::TextUnformatted(row.label);
+            for (std::size_t i = 0; i < k_venues.size(); ++i) {
+                ImGui::TableSetColumnIndex(static_cast<int>(i) + 1);
+                ImGui::PushID(static_cast<int>(i));
+                row.cell(context, k_venues.at(i), i);
                 ImGui::PopID();
             }
-        };
-        row("State", [&](domain::Venue v, std::size_t) {
-            const auto &feed = engine.feed(v);
-            ImGui::Text("%s", k_phase_names[static_cast<std::size_t>(feed.phase())]);
-            ImGui::SameLine();
-            draw_quality_badge(engine.feed_quality(v), feed.age_ms(now));
-            if (feed.phase() == runtime::FeedPhase::Failed) {
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Retry")) {
-                    ui_actions().retry_venue = v;
-                }
-            }
-        });
-        row("Reconnect attempt",
-            [&](domain::Venue v, std::size_t) { ImGui::Text("%u", engine.feed(v).attempt()); });
-        row("Last event age", [&](domain::Venue v, std::size_t) {
-            ImGui::TextUnformatted(format_duration(engine.feed(v).age_ms(now)).c_str());
-        });
-        row("Messages / s", [&](domain::Venue, std::size_t i) { ImGui::Text("%.1f", rate[i]); });
-        row("Frames received", [&](domain::Venue v, std::size_t) {
-            ImGui::Text("%llu",
-                        static_cast<unsigned long long>(engine.counters(v).frames_received));
-        });
-        row("Events", [&](domain::Venue v, std::size_t) {
-            ImGui::Text("%llu", static_cast<unsigned long long>(engine.counters(v).events));
-        });
-        row("Queue depth", [&](domain::Venue v, std::size_t) {
-            ImGui::Text("%zu frames / %zu KiB", engine.queued_frames(v),
-                        engine.queued_bytes(v) / 1024);
-        });
-        row("Dropped frames", [&](domain::Venue v, std::size_t) {
-            ImGui::Text("%llu", static_cast<unsigned long long>(engine.counters(v).frames_dropped));
-        });
-        row("Reconnects", [&](domain::Venue v, std::size_t) {
-            ImGui::Text("%llu", static_cast<unsigned long long>(engine.counters(v).reconnects));
-        });
-        row("Rejected frames", [&](domain::Venue v, std::size_t) {
-            const auto &errors = engine.counters(v).adapter_errors;
-            bool any           = false;
-            for (std::size_t k = 1; k < errors.size(); ++k) {
-                if (errors[k] > 0) {
-                    ImGui::Text("%s: %llu", k_error_names[k],
-                                static_cast<unsigned long long>(errors[k]));
-                    any = true;
-                }
-            }
-            if (!any) {
-                ImGui::TextUnformatted("0");
-            }
-        });
-        row("Book", [&](domain::Venue v, std::size_t) {
-            draw_quality_badge(engine.book_quality(v), 0);
-            if (v == domain::Venue::BinanceUsdM) {
-                ImGui::SameLine();
-                ImGui::Text("resyncs %llu",
-                            static_cast<unsigned long long>(engine.binance_book().resync_count()));
-            }
-        });
+        }
         ImGui::EndTable();
     }
 
   private:
-    std::array<std::int64_t, 2> sample_at_{};
-    std::array<std::uint64_t, 2> sample_count_{};
-    std::array<double, 2> rate_{};
+    std::array<RateMeter, 2> meters_{};
 };
 
 } // namespace

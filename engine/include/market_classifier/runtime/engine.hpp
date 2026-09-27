@@ -86,19 +86,19 @@ class Engine {
     void frame(std::int64_t budget_ms);
 
     [[nodiscard]] const FeedState &feed(domain::Venue v) const {
-        return venues_[venue_index(v)].feed;
+        return venues_.at(venue_index(v)).feed;
     }
     [[nodiscard]] const VenueCounters &counters(domain::Venue v) const {
-        return venues_[venue_index(v)].counters;
+        return venues_.at(venue_index(v)).counters;
     }
     [[nodiscard]] std::size_t queued_frames(domain::Venue v) const {
-        return venues_[venue_index(v)].queue.size();
+        return venues_.at(venue_index(v)).queue.size();
     }
     [[nodiscard]] std::size_t queued_bytes(domain::Venue v) const {
-        return venues_[venue_index(v)].queued_bytes;
+        return venues_.at(venue_index(v)).queued_bytes;
     }
     // Latched when frames were dropped or a reconnect happened; processors mark gaps.
-    [[nodiscard]] bool data_gap(domain::Venue v) const { return venues_[venue_index(v)].gap; }
+    [[nodiscard]] bool data_gap(domain::Venue v) const { return venues_.at(venue_index(v)).gap; }
     [[nodiscard]] std::uint64_t rejected_batches() const noexcept { return rejected_batches_; }
     [[nodiscard]] const books::BinanceBookSync &binance_book() const noexcept {
         return binance_book_;
@@ -110,7 +110,7 @@ class Engine {
     [[nodiscard]] std::int64_t wall_ms() const noexcept { return clock_.wall_time_ms(); }
 
     [[nodiscard]] const VenueProcessors &view(domain::Venue v) const {
-        return processors_[venue_index(v)];
+        return processors_.at(venue_index(v));
     }
     // Quality shown by panels (spec: stale/partial/gap/unsupported are distinct).
     [[nodiscard]] domain::DataQuality feed_quality(domain::Venue v) const;

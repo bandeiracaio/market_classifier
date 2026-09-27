@@ -46,7 +46,7 @@ std::vector<Level> group(std::span<const domain::BookLevel> side, const char *st
 
 class LadderPanel final : public Panel {
   public:
-    PanelKind kind() const override { return PanelKind::Ladder; }
+    [[nodiscard]] PanelKind kind() const override { return PanelKind::Ladder; }
 
     void draw(const runtime::Engine &engine, PanelSettings &settings) override {
         const auto selection = panel_header(engine, kind(), settings, book_q, feed_age);
@@ -62,8 +62,8 @@ class LadderPanel final : public Panel {
             return;
         }
         const auto &book = engine.book(venue);
-        const auto asks  = group(book.asks(), k_groupings[g], false);
-        const auto bids  = group(book.bids(), k_groupings[g], true);
+        const auto asks  = group(book.asks(), k_groupings.at(static_cast<std::size_t>(g)), false);
+        const auto bids  = group(book.bids(), k_groupings.at(static_cast<std::size_t>(g)), true);
         if (!ImGui::BeginTable("ladder", 3,
                                ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchSame)) {
             return;

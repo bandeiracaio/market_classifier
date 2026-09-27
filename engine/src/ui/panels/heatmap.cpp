@@ -12,12 +12,12 @@ constexpr std::int64_t k_window_ms = 15 * 60'000; // visible time span (store ke
 
 ImU32 heat_color(double normalized) {
     const float t = static_cast<float>(std::clamp(normalized, 0.0, 1.0));
-    return ImGui::GetColorU32(ImVec4(t, 0.2f + 0.6f * t * t, 1.0f - t, 0.15f + 0.85f * t));
+    return ImGui::GetColorU32(ImVec4(t, 0.2F + 0.6F * t * t, 1.0F - t, 0.15F + 0.85F * t));
 }
 
 class HeatmapPanel final : public Panel {
   public:
-    PanelKind kind() const override { return PanelKind::Heatmap; }
+    [[nodiscard]] PanelKind kind() const override { return PanelKind::Heatmap; }
 
     void draw(const runtime::Engine &engine, PanelSettings &settings) override {
         const auto selection = panel_header(engine, kind(), settings, book_q, feed_age);
@@ -50,9 +50,9 @@ class HeatmapPanel final : public Panel {
         };
         const double max_log = std::log2(1.0 + std::max(heatmap.max_quantity(), 1e-9));
         const float cell_w   = std::max(
-            1.0f, size.x * static_cast<float>(processors::k_heatmap_column_ms) / k_window_ms);
+            1.0F, size.x * static_cast<float>(processors::k_heatmap_column_ms) / k_window_ms);
         const double quantum = num(heatmap.quantum());
-        const float cell_h   = std::max(1.0f, static_cast<float>(quantum / (hi - lo)) * size.y);
+        const float cell_h   = std::max(1.0F, static_cast<float>(quantum / (hi - lo)) * size.y);
         for (std::size_t i = 0; i < columns.size(); ++i) {
             const auto &c = columns[i];
             if (c.t_ms < begin_t) {
@@ -85,7 +85,7 @@ class HeatmapPanel final : public Panel {
             if (p < lo || p > hi) {
                 continue;
             }
-            const float r = 1.5f + static_cast<float>(std::log2(1.0 + num(trades[i].quantity)));
+            const float r = 1.5F + static_cast<float>(std::log2(1.0 + num(trades[i].quantity)));
             draw->AddCircleFilled(
                 ImVec2(x_of(t), y_of(p)), r,
                 ImGui::GetColorU32(

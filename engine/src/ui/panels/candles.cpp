@@ -16,7 +16,7 @@ constexpr std::array<const char *, 6> k_interval_names{"1m", "5m", "15m", "1h", 
 std::int64_t interval_selector(PanelSettings &settings) {
     int index = 0;
     for (std::size_t i = 0; i < processors::k_candle_intervals_ms.size(); ++i) {
-        if (processors::k_candle_intervals_ms[i] == settings.interval_ms) {
+        if (processors::k_candle_intervals_ms.at(i) == settings.interval_ms) {
             index = static_cast<int>(i);
         }
     }
@@ -24,14 +24,15 @@ std::int64_t interval_selector(PanelSettings &settings) {
     ImGui::SetNextItemWidth(60);
     if (ImGui::Combo("##interval", &index, k_interval_names.data(),
                      static_cast<int>(k_interval_names.size()))) {
-        settings.interval_ms = processors::k_candle_intervals_ms[static_cast<std::size_t>(index)];
+        settings.interval_ms =
+            processors::k_candle_intervals_ms.at(static_cast<std::size_t>(index));
     }
-    return processors::k_candle_intervals_ms[static_cast<std::size_t>(index)];
+    return processors::k_candle_intervals_ms.at(static_cast<std::size_t>(index));
 }
 
 class CandlesPanel final : public Panel {
   public:
-    PanelKind kind() const override { return PanelKind::Candles; }
+    [[nodiscard]] PanelKind kind() const override { return PanelKind::Candles; }
 
     void draw(const runtime::Engine &engine, PanelSettings &settings) override {
         const auto selection = panel_header(engine, kind(), settings, feed_q, feed_age);
@@ -43,7 +44,7 @@ class CandlesPanel final : public Panel {
             return;
         }
         ImPlot::GetStyle().UseLocalTime = !display_prefs().utc_time;
-        const float price_height        = ImGui::GetContentRegionAvail().y * 0.72f;
+        const float price_height        = ImGui::GetContentRegionAvail().y * 0.72F;
         if (ImPlot::BeginPlot("##price", ImVec2(-1, price_height), ImPlotFlags_None)) {
             ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_AutoFit,
                               ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_Opposite);
@@ -99,7 +100,8 @@ class CandlesPanel final : public Panel {
         }
         ImPlot::PopPlotClipRect();
         // Invisible series so AutoFit covers the candles.
-        static thread_local std::vector<double> x, y;
+        static thread_local std::vector<double> x;
+        static thread_local std::vector<double> y;
         x.clear();
         y.clear();
         for (const auto &c : candles) {

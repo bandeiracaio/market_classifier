@@ -16,26 +16,36 @@ bool checked_mul(std::int64_t a, std::int64_t b, std::int64_t &out) noexcept {
         return true;
     }
     if (a == -1) {
-        if (b == k_min)
+        if (b == k_min) {
             return false;
+        }
         out = -b;
         return true;
     }
     if (b == -1) {
-        if (a == k_min)
+        if (a == k_min) {
             return false;
+        }
         out = -a;
         return true;
     }
-    if (a > 0 ? (b > 0 ? a > k_max / b : b < k_min / a) : (b > 0 ? a < k_min / b : b < k_max / a))
+    bool overflow = false;
+    if (a > 0) {
+        overflow = b > 0 ? a > k_max / b : b < k_min / a;
+    } else {
+        overflow = b > 0 ? a < k_min / b : b < k_max / a;
+    }
+    if (overflow) {
         return false;
+    }
     out = a * b;
     return true;
 }
 
 bool checked_add(std::int64_t a, std::int64_t b, std::int64_t &out) noexcept {
-    if ((b > 0 && a > k_max - b) || (b < 0 && a < k_min - b))
+    if ((b > 0 && a > k_max - b) || (b < 0 && a < k_min - b)) {
         return false;
+    }
     out = a + b;
     return true;
 }
@@ -43,8 +53,9 @@ bool checked_add(std::int64_t a, std::int64_t b, std::int64_t &out) noexcept {
 bool pow10(std::uint8_t exponent, std::int64_t &out) noexcept {
     out = 1;
     for (std::uint8_t i = 0; i < exponent; ++i) {
-        if (!checked_mul(out, 10, out))
+        if (!checked_mul(out, 10, out)) {
             return false;
+        }
     }
     return true;
 }
@@ -65,48 +76,59 @@ DecimalResult make(std::int64_t mantissa, int scale) noexcept {
         mantissa /= 10;
         --scale;
     }
-    if (scale > Decimal::k_max_scale)
+    if (scale > Decimal::k_max_scale) {
         return {{}, DecimalError::Inexact};
+    }
     return Decimal::from_parts(mantissa, static_cast<std::uint8_t>(scale));
 }
 
 } // namespace
 
 DecimalResult add(Decimal a, Decimal b) noexcept {
-    std::int64_t ma{}, mb{}, sum{};
+    std::int64_t ma{};
+    std::int64_t mb{};
+    std::int64_t sum{};
     std::uint8_t scale{};
-    if (!align(a, b, ma, mb, scale) || !checked_add(ma, mb, sum))
+    if (!align(a, b, ma, mb, scale) || !checked_add(ma, mb, sum)) {
         return {{}, DecimalError::Overflow};
+    }
     return make(sum, scale);
 }
 
 DecimalResult sub(Decimal a, Decimal b) noexcept {
-    if (b.mantissa() == k_min)
+    if (b.mantissa() == k_min) {
         return {{}, DecimalError::Overflow};
+    }
     const auto negated = Decimal::from_parts(-b.mantissa(), b.scale());
     return add(a, negated.value);
 }
 
 DecimalResult mul(Decimal a, Decimal b) noexcept {
     std::int64_t product{};
-    if (!checked_mul(a.mantissa(), b.mantissa(), product))
+    if (!checked_mul(a.mantissa(), b.mantissa(), product)) {
         return {{}, DecimalError::Overflow};
+    }
     return make(product, a.scale() + b.scale());
 }
 
 DecimalResult floor_to(Decimal value, Decimal step) noexcept {
-    if (step.mantissa() <= 0)
+    if (step.mantissa() <= 0) {
         return {{}, DecimalError::InvalidSyntax};
-    std::int64_t mv{}, ms{};
+    }
+    std::int64_t mv{};
+    std::int64_t ms{};
     std::uint8_t scale{};
-    if (!align(value, step, mv, ms, scale))
+    if (!align(value, step, mv, ms, scale)) {
         return {{}, DecimalError::Overflow};
+    }
     std::int64_t q = mv / ms;
-    if (mv % ms != 0 && mv < 0)
+    if (mv % ms != 0 && mv < 0) {
         --q;
+    }
     std::int64_t floored{};
-    if (!checked_mul(q, ms, floored))
+    if (!checked_mul(q, ms, floored)) {
         return {{}, DecimalError::Overflow};
+    }
     return make(floored, scale);
 }
 
