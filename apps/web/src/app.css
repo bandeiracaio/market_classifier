@@ -76,3 +76,29 @@ canvas#canvas {
 	max-width: 40ch;
 	text-align: center;
 }
+
+/* Workspace notices (fallback restore, import result). Sits above the canvas. */
+.mc-banner {
+	position: absolute;
+	top: 2rem;
+	left: 50%;
+	transform: translateX(-50%);
+	display: flex;
+	gap: 0.75rem;
+	align-items: center;
+	padding: 0.5rem 0.75rem;
+	background: #3a2f12;
+	color: #f5e6b8;
+	border: 1px solid #8a6d1f;
+	border-radius: 4px;
+	font-size: 0.85rem;
+	z-index: 20;
+}
+
+.mc-banner button {
+	background: none;
+	border: none;
+	color: inherit;
+	font-size: 1rem;
+	cursor: pointer;
+}

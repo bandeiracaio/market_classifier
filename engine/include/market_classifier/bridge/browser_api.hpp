@@ -15,10 +15,7 @@ namespace market_classifier::bridge {
 extern "C" {
 
 [[nodiscard]] int mc_bridge_decode(const std::uint8_t *bytes, std::size_t size) noexcept;
-[[nodiscard]] int mc_bridge_submit(const std::uint8_t *bytes, std::size_t size) noexcept;
 [[nodiscard]] const char *mc_bridge_result_name(int code) noexcept;
-[[nodiscard]] std::uint64_t mc_bridge_read_model_events() noexcept;
-[[nodiscard]] std::uint64_t mc_bridge_dropped_batches() noexcept;
 
 // MVP runtime exports (plan Task 6). `venue`: 0 Binance USD-M, 1 Hyperliquid.
 // Returns runtime::RawSubmit as int, or 255 on internal error.

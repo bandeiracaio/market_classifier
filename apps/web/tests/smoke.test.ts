@@ -99,16 +99,12 @@ test.describe('WASM terminal (requires WASM build)', () => {
 		const diagnostics = await page.evaluate(() => ({
 			validResult: document.body.dataset.bridgeValidResult,
 			invalidError: document.body.dataset.bridgeInvalidError,
-			readModelEvents: Number(document.body.dataset.bridgeReadModelEvents),
-			droppedBatches: Number(document.body.dataset.bridgeDroppedBatches),
 			payloadBytes: Number(document.body.dataset.bridgePayloadBytes),
 			decodeMeanMs: Number(document.body.dataset.bridgeDecodeMeanMs),
 			frames: Number(document.body.dataset.frameCount)
 		}));
 		expect(diagnostics.validResult).toBe('accepted');
 		expect(diagnostics.invalidError).toBe('unsupported-version');
-		expect(diagnostics.readModelEvents).toBe(1);
-		expect(diagnostics.droppedBatches).toBe(0);
 		expect(diagnostics.payloadBytes).toBeGreaterThan(0);
 		expect(diagnostics.decodeMeanMs).toBeGreaterThan(0);
 		await page.waitForFunction(

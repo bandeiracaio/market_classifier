@@ -7,7 +7,8 @@
 namespace market_classifier::ui {
 
 std::string OpenPanel::window_name() const {
-    return std::string(traits_of(kind).title) + "###panel" + std::to_string(id);
+    return std::string(traits_of(kind).title) + "###L" + std::to_string(scope) + "_" +
+           std::to_string(id);
 }
 
 std::uint32_t PanelHost::add(PanelKind kind, const PanelSettings &settings, std::uint32_t id) {
@@ -25,6 +26,7 @@ std::uint32_t PanelHost::add(PanelKind kind, const PanelSettings &settings, std:
     p.settings       = settings;
     p.settings.venue = effective_venue(kind, settings.venue);
     p.panel          = make_panel(kind);
+    p.scope          = scope_;
     panels_.push_back(std::move(p));
     return id;
 }

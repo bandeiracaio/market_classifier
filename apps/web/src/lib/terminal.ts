@@ -18,12 +18,37 @@ import {
 	type VenueId
 } from '../../../../bridge/src/venues/driver';
 import { createHyperliquidDriver } from '../../../../bridge/src/venues/hyperliquid';
+import {
+	codecErrorReason,
+	createAutosave,
+	loadWorkspace,
+	openIndexedDbStore,
+	validateImportFile,
+	type KeyValueStore,
+	type WorkspaceTarget
+} from '../../../../bridge/src/persistence';
 
 export type TerminalStatus = 'loading' | 'ready' | 'error';
 
 interface LoadCallbacks {
 	onReady: () => void;
 	onError: (message: string) => void;
+	/** Workspace fallback / import results shown in the host banner. */
+	onNotice?: (message: string) => void;
+	/** File > Import chosen in the terminal: the host opens a file picker. */
+	onImportRequested?: () => void;
+}
+
+/** Host-side handle for workspace file actions. */
+export interface TerminalHandle {
+	/** Returns null when applied, or a human-readable rejection reason. */
+	importWorkspace(text: string): string | null;
+	exportWorkspace(): string;
+}
+
+let handle: TerminalHandle | null = null;
+export function terminalHandle(): TerminalHandle | null {
+	return handle;
 }
 
 // The Emscripten MODULARIZE=1 factory function signature.
@@ -45,6 +70,76 @@ interface EngineExports {
 	_mc_request_snapshot(venue: number): number;
 	_mc_metadata_failed(venue: number): void;
 	_mc_venue_stat(venue: number, which: number): number;
+	_mc_workspace_export(): number;
+	_mc_workspace_import(ptr: number, size: number): number;
+	_mc_workspace_reset(): void;
+	_mc_workspace_dirty(): number;
+	UTF8ToString(ptr: number): string;
+	lengthBytesUTF8(text: string): number;
+	stringToUTF8(text: string, ptr: number, maxBytes: number): void;
+}
+
+function createWorkspaceTarget(m: EngineExports): WorkspaceTarget {
+	return {
+		importJson(json: string): number {
+			const size = m.lengthBytesUTF8(json);
+			const ptr = m._malloc(size + 1);
+			if (ptr === 0) return 1;
+			try {
+				m.stringToUTF8(json, ptr, size + 1);
+				return m._mc_workspace_import(ptr, size);
+			} finally {
+				m._free(ptr);
+			}
+		},
+		exportJson: () => m.UTF8ToString(m._mc_workspace_export()),
+		reset: () => m._mc_workspace_reset(),
+		takeDirty: () => m._mc_workspace_dirty() === 1
+	};
+}
+
+function downloadJson(text: string): void {
+	const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = 'market-classifier-workspace.json';
+	a.click();
+	URL.revokeObjectURL(url);
+}
+
+/** Restores the saved workspace, then autosaves on every change (debounced). */
+async function startPersistence(
+	m: EngineExports,
+	callbacks: LoadCallbacks
+): Promise<(t: number) => void> {
+	const target = createWorkspaceTarget(m);
+	let store: KeyValueStore | null = null;
+	try {
+		store = await openIndexedDbStore(indexedDB);
+	} catch {
+		callbacks.onNotice?.('Workspace storage unavailable; changes will not be saved');
+	}
+	if (store) {
+		const outcome = await loadWorkspace(store, target);
+		document.body.dataset.workspaceSource = outcome.source;
+		if (outcome.notice) callbacks.onNotice?.(outcome.notice);
+	}
+	handle = {
+		importWorkspace(text: string): string | null {
+			const check = validateImportFile(text);
+			if (!check.ok) return check.reason;
+			const code = target.importJson(text);
+			return code === 0 ? null : codecErrorReason(code);
+		},
+		exportWorkspace: () => target.exportJson()
+	};
+	window.addEventListener('mc-workspace', (event: Event) => {
+		const action = (event as CustomEvent<string>).detail;
+		if (action === 'export') downloadJson(target.exportJson());
+		if (action === 'import') callbacks.onImportRequested?.();
+	});
+	const autosave = store ? createAutosave(store, target) : null;
+	return (t: number) => void autosave?.tick(t);
 }
 
 /** Engine sink over the WASM exports: copies each batch into the WASM heap once. */
@@ -71,7 +166,7 @@ function createSink(m: EngineExports): EngineSink {
  * Starts both venue drivers and pumps them once per animation frame, before the WASM
  * main loop drains the engine. Exposes per-venue counters on <body> for tests/diagnostics.
  */
-function startDrivers(m: EngineExports): void {
+function startDrivers(m: EngineExports, onFrame: (t: number) => void): void {
 	const sink = createSink(m);
 	const deps = { WebSocket, fetch: fetch.bind(window), now: () => Date.now() };
 	const drivers: VenueDriver[] = [
@@ -81,6 +176,7 @@ function startDrivers(m: EngineExports): void {
 	for (const d of drivers) d.start();
 	const pump = (t: number) => {
 		for (const d of drivers) d.pump(t);
+		onFrame(t);
 		for (const [venue, name] of [
 			[BINANCE, 'binance'],
 			[HYPERLIQUID, 'hyperliquid']
@@ -153,7 +249,9 @@ export function loadTerminal(callbacks: LoadCallbacks): void {
 			if (!timedOut) {
 				// Debug/test hooks (e.g. _mc_debug_open_panel) are reachable from Playwright.
 				(window as unknown as { mcTerminal?: unknown }).mcTerminal = module;
-				startDrivers(module as unknown as EngineExports);
+				const exports = module as unknown as EngineExports;
+				const persist = await startPersistence(exports, callbacks);
+				startDrivers(exports, persist);
 			}
 		} catch (err: unknown) {
 			clearTimeout(timeout);

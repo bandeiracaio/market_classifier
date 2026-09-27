@@ -15,8 +15,7 @@
 //   date: 2026-09-24
 
 #include "market_classifier/bridge/browser_api.hpp"
-#include "market_classifier/bridge/protocol.hpp"
-#include "market_classifier/domain/events.hpp"
+#include "market_classifier/bridge/raw_frame.hpp"
 #include "market_classifier/version.hpp"
 
 #include "imgui.h"
@@ -48,6 +47,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <vector>
 
 namespace {
 
@@ -94,17 +94,16 @@ EM_JS(void, js_publish_render_metrics, (double mean_ms, double p95_ms), {
     document.body.dataset.wasmHeapBytes = String(HEAPU8.buffer.byteLength);
 });
 EM_JS(void, js_exercise_bridge, (const uint8_t* bytes, int size), {
-    const validResult = Module._mc_bridge_submit(bytes, size);
+    // Decode-only smoke: never submits, so no synthetic data reaches live views.
+    const validResult = Module._mc_bridge_decode(bytes, size);
     const savedVersion = HEAPU8[bytes + 4];
     HEAPU8[bytes + 4] = savedVersion + 1;
-    const invalidResult = Module._mc_bridge_submit(bytes, size);
+    const invalidResult = Module._mc_bridge_decode(bytes, size);
     HEAPU8[bytes + 4] = savedVersion;
 
     const name = (code) => UTF8ToString(Module._mc_bridge_result_name(code));
     document.body.dataset.bridgeValidResult = name(validResult);
     document.body.dataset.bridgeInvalidError = name(invalidResult);
-    document.body.dataset.bridgeReadModelEvents = String(Module._mc_bridge_read_model_events());
-    document.body.dataset.bridgeDroppedBatches = String(Module._mc_bridge_dropped_batches());
     document.body.dataset.bridgePayloadBytes = String(size);
 
     for (let i = 0; i < 50; ++i) Module._mc_bridge_decode(bytes, size);
@@ -116,25 +115,10 @@ EM_JS(void, js_exercise_bridge, (const uint8_t* bytes, int size), {
 // clang-format on
 
 void RunBridgeSmokeOnce() {
-    const auto instrument = market_classifier::domain::InstrumentId::create(
-        market_classifier::domain::Venue::BinanceUsdM, "BTCUSDT");
-    const auto price    = market_classifier::domain::Decimal::parse("42000.25");
-    const auto quantity = market_classifier::domain::Decimal::parse("0.125");
-    const auto notional = market_classifier::domain::Decimal::parse("5250.03125");
-    if (!instrument || !price || !quantity || !notional)
-        return;
-
-    const auto meta = market_classifier::domain::EventMeta::create(
-        instrument.value, market_classifier::domain::SourceTimeMs{1'700'000'000'000},
-        market_classifier::domain::ReceiveTimeMs{1'700'000'000'007},
-        market_classifier::domain::LocalSequence{42}, market_classifier::domain::DataQuality::Live);
-    if (!meta)
-        return;
-
-    const market_classifier::domain::Trade trade{
-        meta.value,  "trade-123",    market_classifier::domain::AggressorSide::Buy,
-        price.value, quantity.value, notional.value};
-    const auto bytes = market_classifier::bridge::encode_trade_batch(std::span{&trade, 1U});
+    const std::vector<market_classifier::bridge::RawFrame> frames{
+        {market_classifier::venues::StreamTag::BinanceWs, 1'700'000'000'007,
+         R"({"stream":"btcusdt@aggTrade","data":{}})"}};
+    const auto bytes = market_classifier::bridge::encode_raw_frames(frames);
     if (!bytes.empty()) {
         js_exercise_bridge(bytes.data(), static_cast<int>(bytes.size()));
     }
@@ -164,6 +148,7 @@ void MainLoopStep() noexcept {
         }
     }
 
+    market_classifier::app::prepare(); // layout switches load ini outside the frame
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();

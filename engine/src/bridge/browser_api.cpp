@@ -1,9 +1,8 @@
 #include "market_classifier/bridge/browser_api.hpp"
 
 #include "market_classifier/bridge/protocol.hpp"
+#include "market_classifier/bridge/raw_frame.hpp"
 #include "market_classifier/runtime/engine.hpp"
-#include "market_classifier/runtime/ingress.hpp"
-#include "market_classifier/runtime/read_model.hpp"
 
 #include <span>
 #include <utility>
@@ -20,9 +19,6 @@ runtime::Engine &app_engine() {
 } // namespace market_classifier::bridge
 
 namespace {
-
-market_classifier::runtime::BoundedIngress g_ingress;
-market_classifier::runtime::DummyReadModel g_read_model;
 
 market_classifier::runtime::Engine &engine() {
     return market_classifier::bridge::app_engine();
@@ -47,35 +43,12 @@ extern "C" int mc_bridge_decode(const std::uint8_t *bytes, std::size_t size) noe
         return static_cast<int>(market_classifier::bridge::DecodeError::Truncated);
     }
     try {
-        const auto decoded = market_classifier::bridge::decode({bytes, size});
-        return static_cast<int>(decoded.error);
-    } catch (...) {
-        return 255;
-    }
-}
-
-extern "C" int mc_bridge_submit(const std::uint8_t *bytes, std::size_t size) noexcept {
-    if (bytes == nullptr && size != 0) {
-        return static_cast<int>(market_classifier::bridge::DecodeError::Truncated);
-    }
-    try {
-        auto decoded = market_classifier::bridge::decode({bytes, size});
-        if (!decoded) {
-            return static_cast<int>(decoded.error);
+        const std::span<const std::uint8_t> input{bytes, size};
+        if (size > 6 && bytes[6] == static_cast<std::uint8_t>(
+                                        market_classifier::bridge::MessageKind::RawFrameBatch)) {
+            return static_cast<int>(market_classifier::bridge::decode_raw_frames(input).error);
         }
-
-        std::vector<market_classifier::domain::NormalizedEvent> events;
-        events.reserve(decoded.trades.size());
-        for (auto &trade : decoded.trades) {
-            events.emplace_back(std::move(trade));
-        }
-        const auto result = g_ingress.submit({std::move(events), size});
-        if (result != market_classifier::runtime::SubmitResult::Accepted &&
-            result != market_classifier::runtime::SubmitResult::AcceptedWithDrop) {
-            return 100 + static_cast<int>(result);
-        }
-        market_classifier::runtime::drain_ingress(g_ingress, g_read_model);
-        return 0;
+        return static_cast<int>(market_classifier::bridge::decode(input).error);
     } catch (...) {
         return 255;
     }
@@ -83,7 +56,6 @@ extern "C" int mc_bridge_submit(const std::uint8_t *bytes, std::size_t size) noe
 
 extern "C" const char *mc_bridge_result_name(int code) noexcept {
     using market_classifier::bridge::DecodeError;
-    using market_classifier::runtime::SubmitResult;
     switch (code) {
     case 0:
         return "accepted";
@@ -113,27 +85,11 @@ extern "C" const char *mc_bridge_result_name(int code) noexcept {
         return "invalid-metadata";
     case static_cast<int>(DecodeError::InvalidSourceId):
         return "invalid-source-id";
-    case 100 + static_cast<int>(SubmitResult::RejectedEmpty):
-        return "rejected-empty";
-    case 100 + static_cast<int>(SubmitResult::RejectedEventLimit):
-        return "rejected-event-limit";
-    case 100 + static_cast<int>(SubmitResult::RejectedByteLimit):
-        return "rejected-byte-limit";
-    case 100 + static_cast<int>(SubmitResult::RejectedOwnedSize):
-        return "rejected-owned-size";
     case 255:
         return "internal-error";
     default:
         return "unknown-error";
     }
-}
-
-extern "C" std::uint64_t mc_bridge_read_model_events() noexcept {
-    return g_read_model.total_events;
-}
-
-extern "C" std::uint64_t mc_bridge_dropped_batches() noexcept {
-    return g_read_model.ingress_counters.dropped_batches;
 }
 
 extern "C" int mc_submit_raw(const std::uint8_t *bytes, std::size_t size) noexcept {

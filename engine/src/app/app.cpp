@@ -2,12 +2,17 @@
 
 #include "market_classifier/bridge/browser_api.hpp"
 #include "market_classifier/runtime/engine.hpp"
-#include "market_classifier/ui/panel_host.hpp"
 #include "market_classifier/ui/ui_state.hpp"
+#include "market_classifier/ui/workspace_controller.hpp"
 
 #include "imgui.h"
 
 #include <cstdint>
+#include <string>
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 namespace market_classifier::app {
 namespace {
@@ -15,8 +20,19 @@ namespace {
 // Frame-loop drain budget for venue data (spec §7.2); the rest of the frame renders.
 constexpr std::int64_t k_engine_budget_ms = 4;
 
-ui::PanelHost &host() {
-    static ui::PanelHost instance;
+#ifdef __EMSCRIPTEN__
+// clang-format off
+// File actions are performed by the Svelte host (download / file picker).
+EM_JS(void, js_request_host_action, (const char *name), {
+    window.dispatchEvent(new CustomEvent('mc-workspace', { detail: UTF8ToString(name) }));
+});
+// clang-format on
+#else
+void js_request_host_action(const char *) {}
+#endif
+
+ui::WorkspaceController &controller() {
+    static ui::WorkspaceController instance;
     return instance;
 }
 
@@ -35,66 +51,91 @@ void apply_actions(runtime::Engine &engine) {
     actions = {};
 }
 
-void dockspace() {
-    ImGuiViewport *viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
-    ImGui::SetNextWindowViewport(viewport->ID);
-    constexpr ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
-        ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_MenuBar;
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::Begin("##dockspace_root", nullptr, flags);
-    ImGui::PopStyleVar(3);
-    if (ImGui::BeginMenuBar()) {
-        if (ImGui::BeginMenu("Panels")) {
-            for (const auto &t : ui::panel_traits()) {
-                if (ImGui::MenuItem(std::string(t.title).c_str())) {
-                    host().add(t.kind);
-                }
-            }
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("View")) {
-            ImGui::MenuItem("UTC time", nullptr, &ui::display_prefs().utc_time);
-            ImGui::EndMenu();
-        }
-        ImGui::EndMenuBar();
-    }
-    ImGui::DockSpace(ImGui::GetID("RootDockSpace"), ImVec2(0.0f, 0.0f),
-                     ImGuiDockNodeFlags_PassthruCentralNode);
-    ImGui::End();
-}
-
 } // namespace
 
 void init() {
-    host().add(ui::PanelKind::Overview);
-    host().add(ui::PanelKind::Diagnostics);
+    ImGui::GetIO().IniFilename       = nullptr; // docking state persists per layout via the bridge
+    controller().on_export_requested = [] { js_request_host_action("export"); };
+    controller().on_import_requested = [] { js_request_host_action("import"); };
+}
+
+void prepare() {
+    controller().prepare();
 }
 
 void frame() {
     auto &engine = bridge::app_engine();
     engine.frame(k_engine_budget_ms);
-    dockspace();
-    host().draw(engine);
+    controller().frame(engine);
     apply_actions(engine);
 }
 
 } // namespace market_classifier::app
 
-// Test hook (Playwright panel smoke): opens a panel of the given kind; returns its id or 0.
+// ---------------------------------------------------------------------------
+// Workspace bridge exports (plan Task 10). JSON crosses the boundary as UTF-8.
+// ---------------------------------------------------------------------------
+namespace {
+std::string g_export_buffer; // valid until the next mc_workspace_export call
+}
+
+extern "C" const char *mc_workspace_export() noexcept {
+    try {
+        g_export_buffer = market_classifier::app::controller().export_json();
+    } catch (...) {
+        g_export_buffer.clear();
+    }
+    return g_export_buffer.c_str();
+}
+
+// Returns ui::CodecError (0 = applied). Oversize input is rejected before parsing.
+extern "C" int mc_workspace_import(const char *json, std::size_t size) noexcept {
+    using market_classifier::ui::CodecError;
+    if (json == nullptr || size > market_classifier::ui::k_max_workspace_json_bytes) {
+        return static_cast<int>(CodecError::TooLarge);
+    }
+    try {
+        return static_cast<int>(market_classifier::app::controller().import_json({json, size}));
+    } catch (...) {
+        return static_cast<int>(CodecError::Malformed);
+    }
+}
+
+extern "C" void mc_workspace_reset() noexcept {
+    try {
+        market_classifier::app::controller().reset();
+    } catch (...) {
+    }
+}
+
+// Returns 1 once after each persisted change (autosave trigger), then 0.
+extern "C" int mc_workspace_dirty() noexcept {
+    return market_classifier::app::controller().take_dirty() ? 1 : 0;
+}
+
+// Test hooks (Playwright): open a panel / switch layout by index.
 extern "C" int mc_debug_open_panel(int kind) noexcept {
     if (kind < 0 || kind >= static_cast<int>(market_classifier::ui::k_panel_kind_count)) {
         return 0;
     }
     try {
-        return static_cast<int>(market_classifier::app::host().add(
+        return static_cast<int>(market_classifier::app::controller().host_mut().add(
             static_cast<market_classifier::ui::PanelKind>(kind)));
+    } catch (...) {
+        return 0;
+    }
+}
+
+extern "C" int mc_debug_activate_layout(int index) noexcept {
+    return index >= 0 &&
+                   market_classifier::app::controller().activate(static_cast<std::size_t>(index))
+               ? 1
+               : 0;
+}
+
+extern "C" int mc_debug_save_layout_as(const char *name) noexcept {
+    try {
+        return name != nullptr && market_classifier::app::controller().save_as(name) ? 1 : 0;
     } catch (...) {
         return 0;
     }
