@@ -1,6 +1,8 @@
 # MVP — BTC Perpetual Order-Flow Terminal
 
-Status: Active milestone packet (approved by owner 2026-09-27)
+Status: Active milestone packet (approved by owner 2026-09-27). Implementation complete on
+`mvp/btc-terminal` 2026-09-27; criteria 1–7 and 9 verified, criterion 8 (Pages) pending —
+see `docs/reviews/mvp-verification.md`.
 Parent specification: `SPECIFICATION.md` (this packet supersedes conflicting sections, see §2)
 Prerequisite: M1 accepted locally (`76ec3c3`)
 Scope owner: project owner
