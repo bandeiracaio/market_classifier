@@ -198,6 +198,8 @@ function startDrivers(m: EngineExports, onFrame: (t: number) => void): void {
 			document.body.dataset[`${name}Phase`] = String(m._mc_venue_stat(venue, 6));
 			document.body.dataset[`${name}AgeMs`] = String(m._mc_venue_stat(venue, 8));
 		}
+		// Live WASM heap (grows with ALLOW_MEMORY_GROWTH) for soak measurements.
+		document.body.dataset.wasmHeapBytes = String(m.HEAPU8.buffer.byteLength);
 		requestAnimationFrame(pump);
 	};
 	requestAnimationFrame(pump);
