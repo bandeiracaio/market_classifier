@@ -1,6 +1,6 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "market_classifier/version.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("version constants are self-consistent", "[version]") {
     using namespace market_classifier;
@@ -20,7 +20,9 @@ TEST_CASE("version constants are self-consistent", "[version]") {
         // Dot-separated version has exactly two dots
         int dot_count = 0;
         for (char c : k_version_string) {
-            if (c == '.') { ++dot_count; }
+            if (c == '.') {
+                ++dot_count;
+            }
         }
         REQUIRE(dot_count == 2);
     }
