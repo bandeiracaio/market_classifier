@@ -9,6 +9,16 @@
 // The WASM module itself sets data-wasm-status and data-frame-count on document.body
 // (see engine/src/main.cpp js_set_wasm_ready / js_increment_frame_count).
 
+import { createBinanceDriver } from '../../../../bridge/src/venues/binance';
+import {
+	BINANCE,
+	HYPERLIQUID,
+	type EngineSink,
+	type VenueDriver,
+	type VenueId
+} from '../../../../bridge/src/venues/driver';
+import { createHyperliquidDriver } from '../../../../bridge/src/venues/hyperliquid';
+
 export type TerminalStatus = 'loading' | 'ready' | 'error';
 
 interface LoadCallbacks {
@@ -22,6 +32,65 @@ interface EmscriptenModule {
 	onRuntimeInitialized?: () => void;
 	setStatus?: (text: string) => void;
 	locateFile?: (path: string, prefix: string) => string;
+}
+
+// C exports used by the venue drivers (engine/include/market_classifier/bridge/browser_api.hpp).
+interface EngineExports {
+	HEAPU8: Uint8Array;
+	_malloc(size: number): number;
+	_free(ptr: number): void;
+	_mc_submit_raw(ptr: number, size: number): number;
+	_mc_socket_event(venue: number, kind: number): void;
+	_mc_should_reconnect(venue: number): number;
+	_mc_request_snapshot(venue: number): number;
+	_mc_metadata_failed(venue: number): void;
+	_mc_venue_stat(venue: number, which: number): number;
+}
+
+/** Engine sink over the WASM exports: copies each batch into the WASM heap once. */
+function createSink(m: EngineExports): EngineSink {
+	return {
+		submitRaw(bytes: Uint8Array): number {
+			const ptr = m._malloc(bytes.length);
+			if (ptr === 0) return 255;
+			try {
+				m.HEAPU8.set(bytes, ptr);
+				return m._mc_submit_raw(ptr, bytes.length);
+			} finally {
+				m._free(ptr);
+			}
+		},
+		socketEvent: (venue: VenueId, kind) => m._mc_socket_event(venue, kind),
+		shouldReconnect: (venue: VenueId) => m._mc_should_reconnect(venue) === 1,
+		requestSnapshot: (venue: VenueId) => m._mc_request_snapshot(venue) === 1,
+		metadataFailed: (venue: VenueId) => m._mc_metadata_failed(venue)
+	};
+}
+
+/**
+ * Starts both venue drivers and pumps them once per animation frame, before the WASM
+ * main loop drains the engine. Exposes per-venue counters on <body> for tests/diagnostics.
+ */
+function startDrivers(m: EngineExports): void {
+	const sink = createSink(m);
+	const deps = { WebSocket, fetch: fetch.bind(window), now: () => Date.now() };
+	const drivers: VenueDriver[] = [
+		createBinanceDriver(sink, deps),
+		createHyperliquidDriver(sink, deps)
+	];
+	for (const d of drivers) d.start();
+	const pump = (t: number) => {
+		for (const d of drivers) d.pump(t);
+		for (const [venue, name] of [
+			[BINANCE, 'binance'],
+			[HYPERLIQUID, 'hyperliquid']
+		] as const) {
+			document.body.dataset[`${name}Frames`] = String(m._mc_venue_stat(venue, 0));
+			document.body.dataset[`${name}Events`] = String(m._mc_venue_stat(venue, 3));
+		}
+		requestAnimationFrame(pump);
+	};
+	requestAnimationFrame(pump);
 }
 
 type EmscriptenFactory = (overrides?: Partial<EmscriptenModule>) => Promise<EmscriptenModule>;
@@ -70,7 +139,7 @@ export function loadTerminal(callbacks: LoadCallbacks): void {
 		}
 
 		try {
-			await factory({
+			const module = await factory({
 				canvas,
 				// Emscripten locateFile resolves sibling WASM binary relative to the JS glue
 				locateFile: (path: string) => `/wasm/${path}`,
@@ -81,6 +150,7 @@ export function loadTerminal(callbacks: LoadCallbacks): void {
 					}
 				}
 			});
+			if (!timedOut) startDrivers(module as unknown as EngineExports);
 		} catch (err: unknown) {
 			clearTimeout(timeout);
 			if (!timedOut) {

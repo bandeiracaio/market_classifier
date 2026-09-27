@@ -137,3 +137,15 @@ TEST_CASE("hyperliquid l2Book snapshots replace the venue book") {
     REQUIRE(e.hyperliquid_book().bids().size() == 20);
     CHECK_FALSE(e.hyperliquid_book().crossed());
 }
+
+TEST_CASE("metadata failure fails only that venue and retry restarts it") {
+    runtime::FakeClock clock;
+    runtime::Engine e(clock);
+    feed_live(e, domain::Venue::Hyperliquid);
+    e.on_metadata_failed(domain::Venue::BinanceUsdM);
+    CHECK(e.feed_quality(domain::Venue::BinanceUsdM) == domain::DataQuality::Failed);
+    CHECK(e.feed(domain::Venue::Hyperliquid).phase() == runtime::FeedPhase::Live);
+    CHECK_FALSE(e.should_reconnect(domain::Venue::BinanceUsdM));
+    e.retry(domain::Venue::BinanceUsdM);
+    CHECK(e.should_reconnect(domain::Venue::BinanceUsdM));
+}

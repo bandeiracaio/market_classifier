@@ -11,12 +11,14 @@
 // Refs:
 //   Dear ImGui Emscripten example: imgui/examples/example_emscripten_opengl3
 //   Emscripten set_main_loop: https://emscripten.org/docs/api_reference/emscripten.h.html
-//   SDL2 OpenGL ES 3 on Emscripten: https://emscripten.org/docs/porting/multimedia_and_graphics/OpenGL-support.html
-//   Verification date: 2026-09-24
+//   SDL2 OpenGL ES 3 on Emscripten:
+//   https://emscripten.org/docs/porting/multimedia_and_graphics/OpenGL-support.html Verification
+//   date: 2026-09-24
 
 #include "market_classifier/bridge/browser_api.hpp"
 #include "market_classifier/bridge/protocol.hpp"
 #include "market_classifier/domain/events.hpp"
+#include "market_classifier/runtime/engine.hpp"
 #include "market_classifier/version.hpp"
 
 #include "imgui.h"
@@ -28,21 +30,22 @@
 // SDL_SetMainReady() must be called before SDL_Init() when this macro is defined.
 // On Emscripten: Emscripten manages the entry point itself; this macro is not needed.
 #ifndef __EMSCRIPTEN__
-#  define SDL_MAIN_HANDLED
+#define SDL_MAIN_HANDLED
 #endif
 #include <SDL2/SDL.h>
 
 #ifdef __EMSCRIPTEN__
 // OpenGL ES 3 / WebGL 2
-#include <GLES3/gl3.h>
 #include <emscripten.h>
+
+#include <GLES3/gl3.h>
 #else
 // Desktop OpenGL — provided by the platform or by SDL2's OpenGL headers
 #include <SDL2/SDL_opengl.h>
 #endif
 
-#include <array>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <numbers>
@@ -53,12 +56,12 @@
 // ---------------------------------------------------------------------------
 namespace {
 
-constexpr int   k_lissajous_points = 512;
-constexpr float k_freq_x           = 3.0f;
-constexpr float k_freq_y           = 2.0f;
-constexpr float k_phase            = static_cast<float>(std::numbers::pi / 4.0);
-constexpr int   k_timing_warmup_frames = 30;
-constexpr int   k_timing_sample_frames = 120;
+constexpr int k_lissajous_points     = 512;
+constexpr float k_freq_x             = 3.0f;
+constexpr float k_freq_y             = 2.0f;
+constexpr float k_phase              = static_cast<float>(std::numbers::pi / 4.0);
+constexpr int k_timing_warmup_frames = 30;
+constexpr int k_timing_sample_frames = 120;
 
 struct LissajousData {
     std::array<double, k_lissajous_points> xs{};
@@ -81,15 +84,15 @@ const LissajousData k_lissajous{};
 // pointer as required by emscripten_set_main_loop.
 // ---------------------------------------------------------------------------
 struct AppState {
-    SDL_Window*   window     = nullptr;
+    SDL_Window *window       = nullptr;
     SDL_GLContext gl_context = nullptr;
-    bool          done       = false;
-    bool          ready_sent = false;
-    bool          metrics_sent = false;
-    bool          bridge_smoke_sent = false;
-    int           frame      = 0;
+    bool done                = false;
+    bool ready_sent          = false;
+    bool metrics_sent        = false;
+    bool bridge_smoke_sent   = false;
+    int frame                = 0;
     std::array<double, k_timing_sample_frames> render_ms{};
-    int           render_sample_count = 0;
+    int render_sample_count = 0;
 };
 
 AppState g_state{};
@@ -166,7 +169,11 @@ void RunBridgeSmokeOnce() {
 // ---------------------------------------------------------------------------
 // Main loop step — must be a plain void() function for emscripten_set_main_loop.
 // ---------------------------------------------------------------------------
+// Frame-loop drain budget for venue data (spec §7.2); the rest of the frame renders.
+constexpr std::int64_t k_engine_budget_ms = 4;
+
 void MainLoopStep() noexcept {
+    market_classifier::bridge::app_engine().frame(k_engine_budget_ms);
 #ifdef __EMSCRIPTEN__
     const double render_started_ms = emscripten_get_now();
     if (!g_state.bridge_smoke_sent) {
@@ -180,8 +187,7 @@ void MainLoopStep() noexcept {
         if (event.type == SDL_QUIT) {
             g_state.done = true;
         }
-        if (event.type == SDL_WINDOWEVENT &&
-            event.window.event == SDL_WINDOWEVENT_CLOSE &&
+        if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE &&
             event.window.windowID == SDL_GetWindowID(g_state.window)) {
             g_state.done = true;
         }
@@ -192,16 +198,16 @@ void MainLoopStep() noexcept {
     ImGui::NewFrame();
 
     // Full-window dockspace — panels dock into this invisible host window.
-    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGuiViewport *viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::SetNextWindowViewport(viewport->ID);
 
     constexpr ImGuiWindowFlags dockspace_flags =
-        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus |
-        ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground;
+        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
+        ImGuiWindowFlags_NoBackground;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
@@ -225,13 +231,10 @@ void MainLoopStep() noexcept {
 
     if (ImPlot::BeginPlot("##lissajous", ImVec2(-1, -1),
                           ImPlotFlags_NoBoxSelect | ImPlotFlags_NoMouseText)) {
-        ImPlot::SetupAxes("x", "y",
-                          ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickLabels,
+        ImPlot::SetupAxes("x", "y", ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickLabels,
                           ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickLabels);
         ImPlot::SetupAxesLimits(-1.1, 1.1, -1.1, 1.1, ImPlotCond_Always);
-        ImPlot::PlotLine("lissajous_3_2",
-                         k_lissajous.xs.data(),
-                         k_lissajous.ys.data(),
+        ImPlot::PlotLine("lissajous_3_2", k_lissajous.xs.data(), k_lissajous.ys.data(),
                          k_lissajous_points);
         ImPlot::EndPlot();
     }
@@ -259,7 +262,7 @@ void MainLoopStep() noexcept {
 
     // Render
     ImGui::Render();
-    ImGuiIO& io = ImGui::GetIO();
+    ImGuiIO &io = ImGui::GetIO();
     glViewport(0, 0, static_cast<int>(io.DisplaySize.x), static_cast<int>(io.DisplaySize.y));
     glClearColor(0.12f, 0.12f, 0.13f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -287,8 +290,7 @@ void MainLoopStep() noexcept {
 
         constexpr std::size_t p95_index =
             static_cast<std::size_t>(k_timing_sample_frames * 95 / 100) - 1;
-        js_publish_render_metrics(total_ms / k_timing_sample_frames,
-                                  sorted_samples[p95_index]);
+        js_publish_render_metrics(total_ms / k_timing_sample_frames, sorted_samples[p95_index]);
         g_state.metrics_sent = true;
     }
 
@@ -305,7 +307,7 @@ void MainLoopStep() noexcept {
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
-int main(int /*argc*/, char* /*argv*/[]) {
+int main(int /*argc*/, char * /*argv*/[]) {
 #ifndef __EMSCRIPTEN__
     SDL_SetMainReady(); // required when SDL_MAIN_HANDLED is defined
 #endif
@@ -324,26 +326,21 @@ int main(int /*argc*/, char* /*argv*/[]) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-    const char* glsl_version = "#version 300 es";
+    const char *glsl_version = "#version 300 es";
 #else
     // Desktop — request OpenGL 3.3 Core.
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    const char* glsl_version = "#version 330 core";
+    const char *glsl_version = "#version 330 core";
 #endif
 
-    constexpr SDL_WindowFlags window_flags =
-        static_cast<SDL_WindowFlags>(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
-                                     SDL_WINDOW_ALLOW_HIGHDPI);
+    constexpr SDL_WindowFlags window_flags = static_cast<SDL_WindowFlags>(
+        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
 
-    g_state.window = SDL_CreateWindow(
-        "Market Classifier",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        1280, 720,
-        window_flags
-    );
+    g_state.window = SDL_CreateWindow("Market Classifier", SDL_WINDOWPOS_CENTERED,
+                                      SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
     if (g_state.window == nullptr) {
         std::fprintf(stderr, "SDL_CreateWindow error: %s\n", SDL_GetError());
         SDL_Quit();
@@ -365,7 +362,7 @@ int main(int /*argc*/, char* /*argv*/[]) {
     ImGui::CreateContext();
     ImPlot::CreateContext();
 
-    ImGuiIO& io = ImGui::GetIO();
+    ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     // Multi-viewport requires native OS windows; incompatible with browser canvas.
     io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;

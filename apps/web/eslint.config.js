@@ -14,6 +14,9 @@ export default [
 				process: 'readonly',
 				setTimeout: 'readonly',
 				clearTimeout: 'readonly',
+				requestAnimationFrame: 'readonly',
+				WebSocket: 'readonly',
+				fetch: 'readonly',
 				window: 'readonly'
 			}
 		}

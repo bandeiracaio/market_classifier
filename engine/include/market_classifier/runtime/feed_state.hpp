@@ -29,7 +29,8 @@ class FeedState {
     void on_close(std::int64_t now_ms); // schedules a reconnect (or fails)
     void on_reconnect_started(std::int64_t now_ms);
     void tick(std::int64_t now_ms);  // Live -> Stale when silent
-    void retry(std::int64_t now_ms); // user action from Failed
+    void retry(std::int64_t now_ms); // user action from Failed: reconnect due now
+    void fail() noexcept;            // unrecoverable without user retry (e.g. metadata)
 
     [[nodiscard]] bool should_reconnect(std::int64_t now_ms) const noexcept;
     [[nodiscard]] FeedPhase phase() const noexcept { return phase_; }

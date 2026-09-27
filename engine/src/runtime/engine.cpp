@@ -174,6 +174,14 @@ void Engine::on_socket_event(domain::Venue v, SocketEvent kind) {
     }
 }
 
+void Engine::on_metadata_failed(domain::Venue v) {
+    venues_[venue_index(v)].feed.fail();
+}
+
+void Engine::retry(domain::Venue v) {
+    venues_[venue_index(v)].feed.retry(now_ms());
+}
+
 bool Engine::should_reconnect(domain::Venue v) {
     auto &venue    = venues_[venue_index(v)];
     const auto now = now_ms();

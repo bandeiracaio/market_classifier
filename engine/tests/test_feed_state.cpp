@@ -91,7 +91,20 @@ TEST_CASE("too many attempts fail the feed") {
     CHECK(f.phase() == runtime::FeedPhase::Failed);
     CHECK(f.quality() == domain::DataQuality::Failed);
     CHECK_FALSE(f.should_reconnect(now + 1'000'000));
-    f.retry(now); // user-initiated retry from Failed
-    CHECK(f.phase() == runtime::FeedPhase::Connecting);
+    f.retry(now); // user-initiated retry from Failed: reconnect is due immediately
+    CHECK(f.phase() == runtime::FeedPhase::Reconnecting);
+    CHECK(f.should_reconnect(now));
     CHECK(f.attempt() == 0);
+}
+
+TEST_CASE("metadata failure fails the feed until retried") {
+    runtime::FeedState f({}, 1);
+    f.fail();
+    CHECK(f.phase() == runtime::FeedPhase::Failed);
+    f.on_open(5);
+    f.on_message(6);
+    CHECK(f.phase() == runtime::FeedPhase::Failed);
+    CHECK_FALSE(f.should_reconnect(100));
+    f.retry(100);
+    CHECK(f.should_reconnect(100));
 }

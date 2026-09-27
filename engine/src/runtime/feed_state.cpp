@@ -64,7 +64,11 @@ void FeedState::retry(std::int64_t now_ms) {
     }
     attempt_       = 0;
     next_retry_ms_ = now_ms;
-    phase_         = FeedPhase::Connecting;
+    phase_         = FeedPhase::Reconnecting;
+}
+
+void FeedState::fail() noexcept {
+    phase_ = FeedPhase::Failed;
 }
 
 bool FeedState::should_reconnect(std::int64_t now_ms) const noexcept {

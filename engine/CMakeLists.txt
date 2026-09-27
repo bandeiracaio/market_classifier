@@ -105,7 +105,8 @@ if(EMSCRIPTEN)
         "SHELL:-s ENVIRONMENT=web"
         "SHELL:-s EXPORT_NAME=MarketClassifier"
         "SHELL:-s MODULARIZE=1"
-        "SHELL:-s EXPORTED_FUNCTIONS=['_main','_mc_bridge_decode','_mc_bridge_submit','_mc_bridge_result_name','_mc_bridge_read_model_events','_mc_bridge_dropped_batches','_mc_submit_raw','_mc_socket_event','_mc_should_reconnect','_mc_request_snapshot','_mc_engine_frame','_mc_venue_stat','_malloc','_free']"
+        "SHELL:-s EXPORTED_RUNTIME_METHODS=['HEAPU8']"
+        "SHELL:-s EXPORTED_FUNCTIONS=['_main','_mc_bridge_decode','_mc_bridge_submit','_mc_bridge_result_name','_mc_bridge_read_model_events','_mc_bridge_dropped_batches','_mc_submit_raw','_mc_socket_event','_mc_should_reconnect','_mc_request_snapshot','_mc_metadata_failed','_mc_retry_venue','_mc_engine_frame','_mc_venue_stat','_malloc','_free']"
     )
 
     # Copy .wasm alongside .js — Emscripten generates both with matching names

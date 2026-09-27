@@ -74,6 +74,9 @@ class Engine {
     // Network side: decode + enqueue only.
     RawSubmit submit_raw(std::span<const std::uint8_t> bytes);
     void on_socket_event(domain::Venue v, SocketEvent kind);
+    // Startup metadata unavailable: venue shows Failed until the user retries (packet §4).
+    void on_metadata_failed(domain::Venue v);
+    void retry(domain::Venue v);
     // Bridge asks once per animation frame; true starts one reconnect attempt.
     [[nodiscard]] bool should_reconnect(domain::Venue v);
     // Latched request for a Binance REST depth snapshot; cleared when read.

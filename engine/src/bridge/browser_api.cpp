@@ -9,15 +9,23 @@
 #include <utility>
 #include <vector>
 
+namespace market_classifier::bridge {
+
+runtime::Engine &app_engine() {
+    static const runtime::SystemClock clock;
+    static runtime::Engine instance(clock);
+    return instance;
+}
+
+} // namespace market_classifier::bridge
+
 namespace {
 
 market_classifier::runtime::BoundedIngress g_ingress;
 market_classifier::runtime::DummyReadModel g_read_model;
 
 market_classifier::runtime::Engine &engine() {
-    static const market_classifier::runtime::SystemClock clock;
-    static market_classifier::runtime::Engine instance(clock);
-    return instance;
+    return market_classifier::bridge::app_engine();
 }
 
 bool venue_from_int(int venue, market_classifier::domain::Venue &out) noexcept {
@@ -158,6 +166,20 @@ extern "C" int mc_should_reconnect(int venue) noexcept {
 extern "C" int mc_request_snapshot(int venue) noexcept {
     market_classifier::domain::Venue v{};
     return venue_from_int(venue, v) && engine().take_snapshot_request(v) ? 1 : 0;
+}
+
+extern "C" void mc_metadata_failed(int venue) noexcept {
+    market_classifier::domain::Venue v{};
+    if (venue_from_int(venue, v)) {
+        engine().on_metadata_failed(v);
+    }
+}
+
+extern "C" void mc_retry_venue(int venue) noexcept {
+    market_classifier::domain::Venue v{};
+    if (venue_from_int(venue, v)) {
+        engine().retry(v);
+    }
 }
 
 extern "C" void mc_engine_frame(int budget_ms) noexcept {
