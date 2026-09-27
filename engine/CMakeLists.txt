@@ -6,8 +6,10 @@ cmake_minimum_required(VERSION 3.28)
 add_library(mc_domain STATIC
     src/bridge/browser_api.cpp
     src/bridge/protocol.cpp
+    src/bridge/raw_frame.cpp
     src/domain/decimal.cpp
     src/domain/types.cpp
+    src/json/json.cpp
     src/runtime/clock.cpp
     src/runtime/ingress.cpp
     src/runtime/read_model.cpp
@@ -17,6 +19,7 @@ add_library(mc_domain STATIC
 target_include_directories(mc_domain PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+target_link_libraries(mc_domain PRIVATE mc_yyjson)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(mc_domain PRIVATE

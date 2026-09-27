@@ -15,7 +15,7 @@ inline constexpr std::size_t k_max_message_bytes      = 64 * 1024;
 inline constexpr std::uint16_t k_max_events_per_batch = 256;
 inline constexpr std::size_t k_max_source_id_bytes    = 128;
 
-enum class MessageKind : std::uint8_t { TradeBatch = 1 };
+enum class MessageKind : std::uint8_t { TradeBatch = 1, RawFrameBatch = 2 };
 
 enum class DecodeError : std::uint8_t {
     None,

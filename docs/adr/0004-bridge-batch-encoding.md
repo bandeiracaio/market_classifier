@@ -85,3 +85,20 @@ semantic change requires a new protocol version. Hosts must negotiate by exact v
 - `engine/tests/test_bridge_protocol.cpp` and `bridge/tests/protocol.test.mjs` cover the
   golden bytes, round-trip semantics, limits, and categorized rejection.
 - `SPECIFICATION.md` sections 9, 18, 19, and 22.
+
+## Addendum (2026-09-27, MVP): RawFrameBatch
+
+`MessageKind::RawFrameBatch = 2` carries raw, size-bounded venue frames from the
+TypeScript bridge to the C++ adapters (plan Task 3; parser per ADR-0005).
+
+- Header: identical 16-byte layout; `count` = number of frames (1..64),
+  `payload_bytes` = body length, flags/reserved zero, protocol version unchanged (1).
+- Body, per frame, little-endian: `u8 stream_tag`, `i64 receive_time_ms`,
+  `u32 length`, then `length` bytes of UTF-8 payload (1..512 KiB).
+- Stream tags (`venues::StreamTag`): 1–5 Binance (exchangeInfo, depth snapshot,
+  combined WS frame, klines REST, openInterest REST), 32–34 Hyperliquid (meta, WS
+  frame, candleSnapshot). Unknown tags are rejected (`InvalidEnum`).
+- Whole batch ≤ 1 MiB of payload plus framing (`k_max_raw_batch_bytes`); the
+  existing 64 KiB `k_max_message_bytes` still bounds TradeBatch only.
+- Golden fixture: `fixtures/mvp/raw-frame-batch-v1.hex`, produced by the TS encoder and
+  decoded by the C++ test.
