@@ -154,7 +154,11 @@ Reload clears all market data. Only workspace state persists.
 
 ## 9. Runtime and failure behavior
 
-- One WebSocket connection per venue carrying all BTC subscriptions.
+- One WebSocket connection per venue route carrying all BTC subscriptions:
+  Hyperliquid uses one socket; Binance USD-M uses two (`/public` for depth and
+  bookTicker, `/market` for aggTrade, markPrice, ticker, kline, forceOrder), sharing
+  one venue feed state (owner decision 2026-09-27, see
+  `docs/protocols/cors-verification.md`).
 - Per-venue connection state machine: connecting → live → stale → reconnecting
   (exponential backoff with jitter and cap) → live, or failed.
 - Heartbeat/ping per venue protocol; staleness thresholds per stream documented.

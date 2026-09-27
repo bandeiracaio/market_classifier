@@ -1,0 +1,31 @@
+<!doctype html><meta charset="utf-8"><title>CORS probe</title><pre id="o"></pre>
+<script>
+// Verifies that every MVP REST endpoint is readable from a browser page origin
+// (packet MVP_BTC_TERMINAL.md §13 slice 1). Results recorded in
+// docs/protocols/cors-verification.md.
+const probes = [
+  ['binance exchangeInfo', 'https://fapi.binance.com/fapi/v1/exchangeInfo', {}],
+  ['binance depth', 'https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=1000', {}],
+  ['binance klines', 'https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1m&limit=1000', {}],
+  ['binance openInterest', 'https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT', {}],
+  ['hl meta', 'https://api.hyperliquid.xyz/info', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'metaAndAssetCtxs'})}],
+  ['hl candleSnapshot', 'https://api.hyperliquid.xyz/info', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'candleSnapshot',req:{coin:'BTC',interval:'1m',startTime:Date.now()-6e7,endTime:Date.now()}})}],
+];
+const o = document.getElementById('o');
+for (const [name, url, init] of probes) {
+  fetch(url, init).then(async r => { const t = await r.text(); o.textContent += `${name}: ${r.status} readable ${t.length} bytes\n`; })
+    .catch(e => { o.textContent += `${name}: BLOCKED ${e}\n`; });
+}
+// WebSocket reachability: open, wait for first message, report.
+const sockets = [
+  ['binance ws', 'wss://fstream.binance.com/stream?streams=btcusdt@aggTrade', null],
+  ['hl ws', 'wss://api.hyperliquid.xyz/ws', JSON.stringify({method:'subscribe',subscription:{type:'trades',coin:'BTC'}})],
+];
+for (const [name, url, sub] of sockets) {
+  const ws = new WebSocket(url);
+  let done = false;
+  ws.onopen = () => { if (sub) ws.send(sub); };
+  ws.onmessage = (m) => { if (done) return; done = true; o.textContent += `${name}: OPEN first message ${String(m.data).length} bytes\n`; ws.close(); };
+  ws.onerror = () => { if (!done) { done = true; o.textContent += `${name}: BLOCKED\n`; } };
+}
+</script>
