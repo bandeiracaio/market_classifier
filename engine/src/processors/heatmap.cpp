@@ -121,7 +121,7 @@ HeatmapRaster rasterize(const Heatmap &heatmap, std::int64_t begin_ms, std::int6
         return raster;
     }
     const double max_log     = std::log2(1.0 + std::max(heatmap.max_quantity(), 1e-9));
-    const double span_ms     = static_cast<double>(end_ms - begin_ms);
+    const auto span_ms       = static_cast<double>(end_ms - begin_ms);
     const auto &columns_ring = heatmap.columns();
     for (std::size_t i = 0; i < columns_ring.size(); ++i) {
         const auto &c = columns_ring[i];
