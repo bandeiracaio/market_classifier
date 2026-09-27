@@ -1,5 +1,7 @@
 #include "market_classifier/processors/footprint.hpp"
 
+#include <algorithm>
+
 #include "../ui_common.hpp"
 #include "panels.hpp"
 

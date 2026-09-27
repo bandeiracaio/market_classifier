@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "../ui_common.hpp"
 #include "panels.hpp"
 

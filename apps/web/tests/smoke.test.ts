@@ -136,12 +136,27 @@ test.describe('WASM terminal (requires WASM build)', () => {
 		await expect(overlay).toBeHidden();
 	});
 
-	test('no market-data network requests are made', async ({ page }) => {
-		const externalWsUrls: string[] = [];
+	// MVP (packet §4, docs/protocols/*.md): market data comes only from the documented public
+	// endpoints — no other hosts, no private/user-data streams.
+	test('network traffic is limited to documented public venue endpoints', async ({ page }) => {
+		const allowedSockets = [
+			'wss://fstream.binance.com/public/stream?streams=',
+			'wss://fstream.binance.com/market/stream?streams=',
+			'wss://api.hyperliquid.xyz/ws'
+		];
+		const allowedHosts = ['fapi.binance.com', 'api.hyperliquid.xyz'];
+		const unexpected: string[] = [];
 		page.on('websocket', (ws) => {
 			const url = ws.url();
-			if (url.includes('binance') || url.includes('hyperliquid')) {
-				externalWsUrls.push(url);
+			if (!allowedSockets.some((prefix) => url.startsWith(prefix)) || url.includes('listenKey')) {
+				unexpected.push(url);
+			}
+		});
+		page.on('request', (request) => {
+			const url = new URL(request.url());
+			const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+			if (!local && url.protocol.startsWith('http') && !allowedHosts.includes(url.hostname)) {
+				unexpected.push(request.url());
 			}
 		});
 
@@ -149,9 +164,8 @@ test.describe('WASM terminal (requires WASM build)', () => {
 		await page.waitForFunction(() => document.body.dataset.wasmStatus === 'ready', {
 			timeout: 30_000
 		});
-		// Allow a brief window for any stray connections
 		await page.waitForTimeout(2_000);
 
-		expect(externalWsUrls).toHaveLength(0);
+		expect(unexpected).toEqual([]);
 	});
 });
