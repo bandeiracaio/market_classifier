@@ -55,4 +55,24 @@ class Heatmap {
     std::int64_t last_update_ms_ = 0;
 };
 
+// Fixed-size intensity grid for drawing: work and draw-list size are bounded by the grid,
+// not by how much book history is stored or visible.
+inline constexpr std::size_t k_max_raster_columns = 480;
+inline constexpr std::size_t k_max_raster_rows    = 256;
+
+struct HeatmapRaster {
+    std::size_t columns = 0;
+    std::size_t rows    = 0;
+    std::vector<float> cells; // row-major, row 0 = highest price; log-scaled 0..1
+
+    [[nodiscard]] float at(std::size_t column, std::size_t row) const {
+        return cells.at(row * columns + column);
+    }
+};
+
+// Max log-scaled quantity per (time, price) cell over [begin_ms, end_ms) x [lo, hi].
+[[nodiscard]] HeatmapRaster rasterize(const Heatmap &heatmap, std::int64_t begin_ms,
+                                      std::int64_t end_ms, double lo, double hi,
+                                      std::size_t columns, std::size_t rows);
+
 } // namespace market_classifier::processors

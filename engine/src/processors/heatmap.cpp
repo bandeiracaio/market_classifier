@@ -111,4 +111,47 @@ void Heatmap::mark_gap(std::int64_t /*t_ms*/) {
     // Missing columns already render as blank time; nothing is interpolated.
 }
 
+HeatmapRaster rasterize(const Heatmap &heatmap, std::int64_t begin_ms, std::int64_t end_ms,
+                        double lo, double hi, std::size_t columns, std::size_t rows) {
+    HeatmapRaster raster;
+    raster.columns = std::clamp<std::size_t>(columns, 1, k_max_raster_columns);
+    raster.rows    = std::clamp<std::size_t>(rows, 1, k_max_raster_rows);
+    raster.cells.assign(raster.columns * raster.rows, 0.0F);
+    if (end_ms <= begin_ms || !(hi > lo)) {
+        return raster;
+    }
+    const double max_log     = std::log2(1.0 + std::max(heatmap.max_quantity(), 1e-9));
+    const double span_ms     = static_cast<double>(end_ms - begin_ms);
+    const auto &columns_ring = heatmap.columns();
+    for (std::size_t i = 0; i < columns_ring.size(); ++i) {
+        const auto &c = columns_ring[i];
+        if (c.t_ms < begin_ms || c.t_ms > end_ms) {
+            continue;
+        }
+        const auto col =
+            std::min(raster.columns - 1,
+                     static_cast<std::size_t>(static_cast<double>(c.t_ms - begin_ms) / span_ms *
+                                              static_cast<double>(raster.columns)));
+        const auto side = [&](const std::vector<std::int16_t> &offsets,
+                              const std::vector<std::uint16_t> &codes) {
+            for (std::size_t k = 0; k < offsets.size(); ++k) {
+                const double p = c.price_of(offsets[k], heatmap.quantum());
+                if (p < lo || p > hi) {
+                    continue;
+                }
+                const auto row = std::min(
+                    raster.rows - 1, static_cast<std::size_t>((hi - p) / (hi - lo) *
+                                                              static_cast<double>(raster.rows)));
+                const double q = HeatmapColumn::decode_quantity(codes[k]);
+                auto &cell     = raster.cells[row * raster.columns + col];
+                cell =
+                    std::max(cell, static_cast<float>(std::min(1.0, std::log2(1.0 + q) / max_log)));
+            }
+        };
+        side(c.bid_offsets, c.bid_quantities);
+        side(c.ask_offsets, c.ask_quantities);
+    }
+    return raster;
+}
+
 } // namespace market_classifier::processors

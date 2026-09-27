@@ -49,32 +49,24 @@ class HeatmapPanel final : public Panel {
         const auto y_of = [&](double p) {
             return origin.y + static_cast<float>((hi - p) / (hi - lo)) * size.y;
         };
-        const double max_log = std::log2(1.0 + std::max(heatmap.max_quantity(), 1e-9));
-        const float cell_w   = std::max(
-            1.0F, size.x * static_cast<float>(processors::k_heatmap_column_ms) / k_window_ms);
-        const double quantum = num(heatmap.quantum());
-        const float cell_h   = std::max(1.0F, static_cast<float>(quantum / (hi - lo)) * size.y);
-        for (std::size_t i = 0; i < columns.size(); ++i) {
-            const auto &c = columns[i];
-            if (c.t_ms < begin_t) {
-                continue;
-            }
-            const float x   = x_of(c.t_ms);
-            const auto side = [&](const std::vector<std::int16_t> &offsets,
-                                  const std::vector<std::uint16_t> &codes) {
-                for (std::size_t k = 0; k < offsets.size(); ++k) {
-                    const double p = c.price_of(offsets[k], heatmap.quantum());
-                    if (p < lo || p > hi) {
-                        continue;
-                    }
-                    const double q = processors::HeatmapColumn::decode_quantity(codes[k]);
-                    const float y  = y_of(p);
-                    draw->AddRectFilled(ImVec2(x, y - cell_h), ImVec2(x + cell_w, y),
-                                        heat_color(std::log2(1.0 + q) / max_log));
+        // One rect per raster cell (<= 480 x 256) regardless of stored/visible history.
+        constexpr float k_cell_px = 3.0F;
+        const auto raster         = processors::rasterize(heatmap, begin_t, end_t, lo, hi,
+                                                          static_cast<std::size_t>(size.x / k_cell_px),
+                                                          static_cast<std::size_t>(size.y / k_cell_px));
+        const float cell_w        = size.x / static_cast<float>(raster.columns);
+        const float cell_h        = size.y / static_cast<float>(raster.rows);
+        for (std::size_t row = 0; row < raster.rows; ++row) {
+            for (std::size_t col = 0; col < raster.columns; ++col) {
+                const float v = raster.at(col, row);
+                if (v <= 0.0F) {
+                    continue;
                 }
-            };
-            side(c.bid_offsets, c.bid_quantities);
-            side(c.ask_offsets, c.ask_quantities);
+                const ImVec2 top_left(origin.x + static_cast<float>(col) * cell_w,
+                                      origin.y + static_cast<float>(row) * cell_h);
+                draw->AddRectFilled(top_left, ImVec2(top_left.x + cell_w, top_left.y + cell_h),
+                                    heat_color(v));
+            }
         }
         const auto &trades = heatmap.trades();
         for (std::size_t i = trades.size(); i-- > 0;) {

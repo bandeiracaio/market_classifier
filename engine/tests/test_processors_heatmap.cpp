@@ -71,3 +71,33 @@ TEST_CASE("heatmap trade overlay is bounded") {
     }
     CHECK(h.trades().size() == processors::k_heatmap_trades);
 }
+
+TEST_CASE("heatmap raster is bounded and places liquidity by time and price") {
+    processors::Heatmap h(dec("0.1"));
+    const auto book = book_with(300);
+    for (std::int64_t i = 0; i < 4000; ++i) {
+        h.on_book(book, i * processors::k_heatmap_column_ms);
+    }
+    const auto end   = 3999 * processors::k_heatmap_column_ms;
+    const auto begin = end - 15 * 60'000;
+    // Requests larger than the cap are clamped: draw work never scales with stored data.
+    const auto big = processors::rasterize(h, begin, end, 99990.0, 100010.0, 100000, 100000);
+    CHECK(big.columns == processors::k_max_raster_columns);
+    CHECK(big.rows == processors::k_max_raster_rows);
+    CHECK(big.cells.size() == big.columns * big.rows);
+
+    const auto r = processors::rasterize(h, begin, end, 99990.0, 100010.0, 10, 20);
+    REQUIRE(r.cells.size() == 200);
+    // Best bid 100000.0 sits mid-range: row index from the top = (hi - p) / (hi - lo) * rows.
+    const std::size_t bid_row = 10;
+    CHECK(r.at(9, bid_row) > 0.0F); // newest column has liquidity at the bid
+    // Book spans 99970.1..100030.0; a window entirely above it stays empty.
+    const auto above = processors::rasterize(h, begin, end, 100040.0, 100060.0, 10, 20);
+    for (const float v : above.cells) {
+        CHECK(v == 0.0F);
+    }
+    for (const float v : r.cells) {
+        CHECK(v >= 0.0F);
+        CHECK(v <= 1.0F);
+    }
+}
