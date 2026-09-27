@@ -9,6 +9,8 @@ add_executable(mc_tests
     test_json.cpp
     test_binance_adapter.cpp
     test_hyperliquid_adapter.cpp
+    test_order_book.cpp
+    test_binance_book_sync.cpp
     test_runtime.cpp
     test_replay.cpp
     test_version.cpp

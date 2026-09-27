@@ -7,6 +7,8 @@ add_library(mc_domain STATIC
     src/bridge/browser_api.cpp
     src/bridge/protocol.cpp
     src/bridge/raw_frame.cpp
+    src/books/binance_book_sync.cpp
+    src/books/order_book.cpp
     src/domain/decimal.cpp
     src/domain/decimal_math.cpp
     src/domain/types.cpp
