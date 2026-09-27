@@ -151,8 +151,8 @@ if(EMSCRIPTEN)
 endif()
 
 # ---------------------------------------------------------------------------
-# Native unit tests — Catch2, not built for WASM
+# Unit tests — Catch2. Native always; WASM (Node) when MC_WASM_TESTS=ON.
 # ---------------------------------------------------------------------------
-if(NOT EMSCRIPTEN)
+if(NOT EMSCRIPTEN OR MC_WASM_TESTS)
     add_subdirectory(tests)
 endif()

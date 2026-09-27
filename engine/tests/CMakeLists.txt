@@ -52,4 +52,17 @@ elseif(MSVC)
     )
 endif()
 
-catch_discover_tests(mc_tests)
+if(EMSCRIPTEN)
+    # Node runner with direct host filesystem access so fixtures load from MC_SOURCE_DIR.
+    target_link_options(mc_tests PRIVATE
+        "SHELL:-s ENVIRONMENT=node"
+        "SHELL:-s NODERAWFS=1"
+        "SHELL:-s ALLOW_MEMORY_GROWTH=1"
+        "SHELL:-s EXIT_RUNTIME=1"
+        "SHELL:-s STACK_SIZE=1048576"
+    )
+    # The Emscripten toolchain sets node as CMAKE_CROSSCOMPILING_EMULATOR for targets.
+    add_test(NAME mc_tests_wasm COMMAND mc_tests)
+else()
+    catch_discover_tests(mc_tests)
+endif()

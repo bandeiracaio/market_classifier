@@ -180,6 +180,13 @@ jobs:
           source "$HOME/.emsdk/emsdk_env.sh"
           cmake --build --preset wasm-release
 
+      - name: Unit and replay tests in WASM (Node)
+        run: |
+          source "$HOME/.emsdk/emsdk_env.sh"
+          emcmake cmake --preset wasm-tests
+          cmake --build --preset wasm-tests
+          ctest --preset wasm-tests
+
       - name: Verify WASM artifacts exist
         run: |
           test -f apps/web/static/wasm/market_classifier.js

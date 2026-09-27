@@ -98,7 +98,7 @@ target_include_directories(mc_implot SYSTEM PUBLIC ${implot_SOURCE_DIR})
 target_link_libraries(mc_implot PUBLIC mc_imgui)
 
 # ---------------------------------------------------------------------------
-# yyjson � JSON parser for venue adapters (ADR-0005)
+# yyjson — JSON parser for venue adapters (ADR-0005)
 # Pinned: 0.10.0 https://github.com/ibireme/yyjson/releases
 # Built as our own static C library; upstream CMake is not added (SOURCE_SUBDIR
 # points at a non-existent dir) so only yyjson.c is compiled.
@@ -118,10 +118,12 @@ target_include_directories(mc_yyjson SYSTEM PUBLIC ${yyjson_SOURCE_DIR}/src)
 target_compile_definitions(mc_yyjson PRIVATE YYJSON_DISABLE_WRITER=1 YYJSON_DISABLE_UTILS=1)
 
 # ---------------------------------------------------------------------------
-# Catch2 — native test framework (ADR-0002)
+# Catch2 — test framework (ADR-0002). Native by default; MC_WASM_TESTS=ON also builds the
+# suite with Emscripten for Node so replay tests run in WASM (packet §12 criterion 1).
 # Pinned: v3.7.1 (2024-10-04) https://github.com/catchorg/Catch2/releases
 # ---------------------------------------------------------------------------
-if(NOT EMSCRIPTEN)
+option(MC_WASM_TESTS "Build the Catch2 suite for Node under Emscripten" OFF)
+if(NOT EMSCRIPTEN OR MC_WASM_TESTS)
     FetchContent_Declare(
         Catch2
         GIT_REPOSITORY https://github.com/catchorg/Catch2.git
