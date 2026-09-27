@@ -1,4 +1,5 @@
 // Workspace persistence (plan Task 10 / packet §12 #6). Requires the WASM build.
+import { installFakeVenues } from './fake-venues';
 import { isVenueNoise } from './venue-noise';
 import { test, expect, type Page } from '@playwright/test';
 
@@ -31,6 +32,7 @@ test.describe('workspace (requires WASM build)', () => {
 	test.beforeEach(async ({ page }) => {
 		const response = await page.request.get('/wasm/market_classifier.js').catch(() => null);
 		test.skip(response === null || response.status() !== 200, 'WASM build not present');
+		await installFakeVenues(page); // deterministic, region-independent venue data
 	});
 
 	test('first run opens Overview and every preset opens without console errors', async ({

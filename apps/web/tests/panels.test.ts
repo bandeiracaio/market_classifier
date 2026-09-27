@@ -1,5 +1,6 @@
 // Panel smoke (plan Task 9): every PanelKind opens in the real WASM terminal without
 // console errors and the render loop keeps running.
+import { installFakeVenues } from './fake-venues';
 import { isVenueNoise } from './venue-noise';
 import { test, expect } from '@playwright/test';
 
@@ -12,6 +13,7 @@ test.describe('panels (requires WASM build)', () => {
 			response === null || response.status() !== 200,
 			'WASM build not present — run the wasm-release build preset first'
 		);
+		await installFakeVenues(page); // deterministic, region-independent venue data
 	});
 
 	test('each panel kind opens without console errors', async ({ page }) => {

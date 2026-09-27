@@ -24,6 +24,7 @@ add_executable(mc_tests
     test_panel_registry.cpp
     test_workspace_codec.cpp
     test_workspace_controller.cpp
+    test_flood.cpp
     test_runtime.cpp
     test_replay.cpp
     test_version.cpp

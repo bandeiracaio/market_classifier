@@ -29,6 +29,6 @@ void mc_retry_venue(int venue) noexcept;
 // Drains queued frames within `budget_ms`; called once per animation frame.
 void mc_engine_frame(int budget_ms) noexcept;
 // Diagnostics: 0 received, 1 adapted, 2 dropped, 3 events, 4 reconnects, 5 queued frames,
-// 6 feed phase, 7 rejected batches (venue ignored).
+// 6 feed phase (runtime::FeedPhase), 7 rejected batches (venue ignored), 8 last event age ms.
 [[nodiscard]] double mc_venue_stat(int venue, int which) noexcept;
 }

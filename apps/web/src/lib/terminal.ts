@@ -194,6 +194,9 @@ function startDrivers(m: EngineExports, onFrame: (t: number) => void): void {
 		] as const) {
 			document.body.dataset[`${name}Frames`] = String(m._mc_venue_stat(venue, 0));
 			document.body.dataset[`${name}Events`] = String(m._mc_venue_stat(venue, 3));
+			// Feed phase (0 Connecting, 1 Live, 2 Stale, 3 Reconnecting, 4 Failed) and data age.
+			document.body.dataset[`${name}Phase`] = String(m._mc_venue_stat(venue, 6));
+			document.body.dataset[`${name}AgeMs`] = String(m._mc_venue_stat(venue, 8));
 		}
 		requestAnimationFrame(pump);
 	};

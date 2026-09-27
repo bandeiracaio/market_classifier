@@ -169,6 +169,8 @@ extern "C" double mc_venue_stat(int venue, int which) noexcept {
         return static_cast<double>(engine().queued_frames(v));
     case 6:
         return static_cast<double>(engine().feed(v).phase());
+    case 8:
+        return static_cast<double>(engine().feed(v).age_ms(engine().now_ms()));
     default:
         return -1;
     }
