@@ -13,6 +13,12 @@ add_library(mc_domain STATIC
     src/domain/decimal_math.cpp
     src/domain/types.cpp
     src/json/json.cpp
+    src/processors/candles.cpp
+    src/processors/cvd.cpp
+    src/processors/footprint.cpp
+    src/processors/heatmap.cpp
+    src/processors/metrics.cpp
+    src/processors/trades.cpp
     src/venues/binance_adapter.cpp
     src/venues/hyperliquid_adapter.cpp
     src/venues/instruments.cpp

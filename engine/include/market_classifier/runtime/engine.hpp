@@ -3,6 +3,12 @@
 #include "market_classifier/books/binance_book_sync.hpp"
 #include "market_classifier/books/order_book.hpp"
 #include "market_classifier/bridge/raw_frame.hpp"
+#include "market_classifier/processors/candles.hpp"
+#include "market_classifier/processors/cvd.hpp"
+#include "market_classifier/processors/footprint.hpp"
+#include "market_classifier/processors/heatmap.hpp"
+#include "market_classifier/processors/metrics.hpp"
+#include "market_classifier/processors/trades.hpp"
 #include "market_classifier/runtime/clock.hpp"
 #include "market_classifier/runtime/feed_state.hpp"
 #include "market_classifier/venues/binance_adapter.hpp"
@@ -12,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <optional>
 #include <span>
 
 namespace market_classifier::runtime {
@@ -38,6 +45,19 @@ struct VenueCounters {
     std::array<std::uint64_t, k_adapter_error_kinds> adapter_errors{};
 };
 
+// Read models per venue. Panels read these through `const Engine &` only.
+struct VenueProcessors {
+    explicit VenueProcessors(domain::Decimal heatmap_quantum);
+    processors::TradeTape tape;
+    processors::LiquidationLog liquidations;
+    processors::Cvd cvd;
+    processors::Footprint footprint; // $1 base bucket, 1m bars; aggregated on read
+    processors::CandleSeries candles;
+    processors::Heatmap heatmap;
+    processors::Metrics metrics;
+    std::optional<domain::InstrumentDefinition> definition;
+};
+
 [[nodiscard]] constexpr std::size_t venue_index(domain::Venue v) noexcept {
     return v == domain::Venue::BinanceUsdM ? 0 : 1;
 }
@@ -47,7 +67,7 @@ struct VenueCounters {
 class Engine {
   public:
     explicit Engine(const Clock &clock);
-    virtual ~Engine()                 = default;
+    ~Engine()                         = default;
     Engine(const Engine &)            = delete;
     Engine &operator=(const Engine &) = delete;
 
@@ -86,12 +106,17 @@ class Engine {
     [[nodiscard]] std::int64_t now_ms() const noexcept { return clock_.monotonic_time_ms(); }
     [[nodiscard]] std::int64_t wall_ms() const noexcept { return clock_.wall_time_ms(); }
 
-  protected:
-    // Extension point for processors (Task 7). Called for every normalized event in
-    // arrival order after books are updated.
-    virtual void on_event(domain::Venue /*v*/, const domain::NormalizedEvent & /*event*/) {}
-    // Called when a venue's continuity is broken (drops, reconnect, book gap).
-    virtual void on_gap(domain::Venue /*v*/, std::int64_t /*wall_ms*/) {}
+    [[nodiscard]] const VenueProcessors &view(domain::Venue v) const {
+        return processors_[venue_index(v)];
+    }
+    // Quality shown by panels (spec: stale/partial/gap/unsupported are distinct).
+    [[nodiscard]] domain::DataQuality feed_quality(domain::Venue v) const;
+    [[nodiscard]] domain::DataQuality book_quality(domain::Venue v) const;
+    [[nodiscard]] domain::DataQuality liquidation_quality(domain::Venue v) const;
+    [[nodiscard]] const books::OrderBook &book(domain::Venue v) const;
+    [[nodiscard]] std::optional<processors::BasisView> basis() const;
+    void set_cvd_daily_reset(domain::Venue v, bool enabled);
+    void reset_cvd(domain::Venue v);
 
   private:
     struct Venue {
@@ -105,6 +130,8 @@ class Engine {
     };
 
     void dispatch(domain::Venue v, const venues::AdapterResult &result);
+    void process(domain::Venue v, const domain::NormalizedEvent &event);
+    void sample_book(domain::Venue v, std::int64_t t_ms);
     void mark_gap(domain::Venue v);
 
     const Clock &clock_;
@@ -113,6 +140,7 @@ class Engine {
     venues::HyperliquidAdapter hyperliquid_adapter_;
     books::BinanceBookSync binance_book_;
     books::OrderBook hyperliquid_book_;
+    std::array<VenueProcessors, k_venue_count> processors_;
     std::uint64_t rejected_batches_ = 0;
 };
 

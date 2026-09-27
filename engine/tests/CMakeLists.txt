@@ -14,6 +14,13 @@ add_executable(mc_tests
     test_ring.cpp
     test_feed_state.cpp
     test_engine.cpp
+    test_processors_trades.cpp
+    test_processors_cvd.cpp
+    test_processors_footprint.cpp
+    test_processors_candles.cpp
+    test_processors_heatmap.cpp
+    test_processors_metrics.cpp
+    test_replay_mvp.cpp
     test_runtime.cpp
     test_replay.cpp
     test_version.cpp

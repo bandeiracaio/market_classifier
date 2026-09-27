@@ -1,13 +1,27 @@
 #include "market_classifier/runtime/engine.hpp"
 
+#include "market_classifier/venues/instruments.hpp"
+
 #include <type_traits>
 #include <variant>
 
 namespace market_classifier::runtime {
 
+namespace {
+// Heatmap price quantum: Binance BTCUSDT tick 0.1; Hyperliquid prices are integers at
+// BTC magnitudes (5 significant figures). docs/calculations/heatmap.md.
+const domain::Decimal k_binance_quantum     = domain::Decimal::from_parts(1, 1).value;
+const domain::Decimal k_hyperliquid_quantum = domain::Decimal::from_parts(1, 0).value;
+const domain::Decimal k_footprint_base      = domain::Decimal::from_parts(1, 0).value;
+} // namespace
+
+VenueProcessors::VenueProcessors(domain::Decimal heatmap_quantum)
+    : footprint(k_footprint_base), heatmap(heatmap_quantum) {}
+
 Engine::Engine(const Clock &clock)
     // Distinct fixed seeds keep per-venue jitter deterministic and uncorrelated.
-    : clock_(clock), venues_{Venue{0x42u}, Venue{0x4Cu}} {}
+    : clock_(clock), venues_{Venue{0x42u}, Venue{0x4Cu}},
+      processors_{VenueProcessors{k_binance_quantum}, VenueProcessors{k_hyperliquid_quantum}} {}
 
 RawSubmit Engine::submit_raw(std::span<const std::uint8_t> bytes) {
     auto decoded = bridge::decode_raw_frames(bytes);
@@ -39,9 +53,99 @@ RawSubmit Engine::submit_raw(std::span<const std::uint8_t> bytes) {
 }
 
 void Engine::mark_gap(domain::Venue v) {
-    auto &venue = venues_[venue_index(v)];
-    venue.gap   = true;
-    on_gap(v, wall_ms());
+    venues_[venue_index(v)].gap = true;
+    auto &p                     = processors_[venue_index(v)];
+    const auto t                = wall_ms();
+    p.cvd.mark_gap(t);
+    p.footprint.mark_gap(t);
+    p.candles.mark_gap(t);
+    p.heatmap.mark_gap(t);
+}
+
+void Engine::sample_book(domain::Venue v, std::int64_t t_ms) {
+    if (v == domain::Venue::BinanceUsdM) {
+        if (binance_book_.state() == books::SyncState::Live) {
+            processors_[0].heatmap.on_book(binance_book_.book(), t_ms);
+        }
+    } else {
+        processors_[1].heatmap.on_book(hyperliquid_book_, t_ms);
+    }
+}
+
+void Engine::process(domain::Venue v, const domain::NormalizedEvent &event) {
+    auto &p = processors_[venue_index(v)];
+    std::visit(
+        [&](const auto &e) {
+            using E = std::decay_t<decltype(e)>;
+            if constexpr (std::is_same_v<E, domain::Trade>) {
+                p.tape.on_trade(e);
+                p.cvd.on_trade(e);
+                p.footprint.on_trade(e);
+                p.heatmap.on_trade(e);
+            } else if constexpr (std::is_same_v<E, domain::Liquidation>) {
+                p.liquidations.on_liquidation(e);
+            } else if constexpr (std::is_same_v<E, domain::Candle>) {
+                p.candles.on_candle(e);
+            } else if constexpr (std::is_same_v<E, domain::AssetMetrics>) {
+                p.metrics.on_asset_metrics(e);
+            } else if constexpr (std::is_same_v<E, domain::OpenInterest>) {
+                p.metrics.on_open_interest(e);
+            } else if constexpr (std::is_same_v<E, domain::MarketSummary>) {
+                p.metrics.on_summary(e);
+            } else if constexpr (std::is_same_v<E, domain::Bbo>) {
+                p.metrics.on_bbo(e);
+            } else if constexpr (std::is_same_v<E, domain::InstrumentDefinition>) {
+                p.definition = e;
+            } else if constexpr (std::is_same_v<E, domain::BookSnapshot> ||
+                                 std::is_same_v<E, domain::BookDelta>) {
+                sample_book(v, e.meta.receive_time().value);
+            }
+        },
+        event);
+}
+
+domain::DataQuality Engine::feed_quality(domain::Venue v) const {
+    return venues_[venue_index(v)].feed.quality();
+}
+
+domain::DataQuality Engine::book_quality(domain::Venue v) const {
+    const auto feed_q = feed_quality(v);
+    if (feed_q != domain::DataQuality::Live) {
+        return feed_q;
+    }
+    if (v == domain::Venue::BinanceUsdM) {
+        switch (binance_book_.state()) {
+        case books::SyncState::Live:
+            return domain::DataQuality::Live;
+        case books::SyncState::GapDetected:
+            return domain::DataQuality::GapDetected;
+        case books::SyncState::AwaitingSnapshot:
+            return domain::DataQuality::Partial;
+        }
+    }
+    return hyperliquid_book_.bids().empty() && hyperliquid_book_.asks().empty()
+               ? domain::DataQuality::Partial
+               : domain::DataQuality::Live;
+}
+
+domain::DataQuality Engine::liquidation_quality(domain::Venue v) const {
+    return venues::supports_liquidations(v) ? feed_quality(v) : domain::DataQuality::Unsupported;
+}
+
+const books::OrderBook &Engine::book(domain::Venue v) const {
+    return v == domain::Venue::BinanceUsdM ? binance_book_.book() : hyperliquid_book_;
+}
+
+std::optional<processors::BasisView> Engine::basis() const {
+    return processors::cross_venue_basis(processors_[0].metrics, processors_[1].metrics);
+}
+
+void Engine::set_cvd_daily_reset(domain::Venue v, bool enabled) {
+    processors_[venue_index(v)].cvd.daily_reset_enabled = enabled;
+}
+
+void Engine::reset_cvd(domain::Venue v) {
+    processors_[venue_index(v)].cvd.reset();
 }
 
 void Engine::on_socket_event(domain::Venue v, SocketEvent kind) {
@@ -115,7 +219,7 @@ void Engine::dispatch(domain::Venue v, const venues::AdapterResult &result) {
             },
             event);
         ++venue.counters.events;
-        on_event(v, event);
+        process(v, event);
     }
 }
 
