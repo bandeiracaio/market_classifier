@@ -1,6 +1,7 @@
 #include "market_classifier/bridge/browser_api.hpp"
 
 #include "market_classifier/bridge/protocol.hpp"
+#include "market_classifier/runtime/engine.hpp"
 #include "market_classifier/runtime/ingress.hpp"
 #include "market_classifier/runtime/read_model.hpp"
 
@@ -12,6 +13,24 @@ namespace {
 
 market_classifier::runtime::BoundedIngress g_ingress;
 market_classifier::runtime::DummyReadModel g_read_model;
+
+market_classifier::runtime::Engine &engine() {
+    static const market_classifier::runtime::SystemClock clock;
+    static market_classifier::runtime::Engine instance(clock);
+    return instance;
+}
+
+bool venue_from_int(int venue, market_classifier::domain::Venue &out) noexcept {
+    if (venue == 0) {
+        out = market_classifier::domain::Venue::BinanceUsdM;
+        return true;
+    }
+    if (venue == 1) {
+        out = market_classifier::domain::Venue::Hyperliquid;
+        return true;
+    }
+    return false;
+}
 
 } // namespace
 
@@ -107,4 +126,72 @@ extern "C" std::uint64_t mc_bridge_read_model_events() noexcept {
 
 extern "C" std::uint64_t mc_bridge_dropped_batches() noexcept {
     return g_read_model.ingress_counters.dropped_batches;
+}
+
+extern "C" int mc_submit_raw(const std::uint8_t *bytes, std::size_t size) noexcept {
+    if (bytes == nullptr && size != 0) {
+        return static_cast<int>(market_classifier::runtime::RawSubmit::RejectedDecode);
+    }
+    try {
+        return static_cast<int>(engine().submit_raw({bytes, size}));
+    } catch (...) {
+        return 255;
+    }
+}
+
+extern "C" void mc_socket_event(int venue, int kind) noexcept {
+    market_classifier::domain::Venue v{};
+    if (!venue_from_int(venue, v) || kind < 0 || kind > 2) {
+        return;
+    }
+    try {
+        engine().on_socket_event(v, static_cast<market_classifier::runtime::SocketEvent>(kind));
+    } catch (...) {
+    }
+}
+
+extern "C" int mc_should_reconnect(int venue) noexcept {
+    market_classifier::domain::Venue v{};
+    return venue_from_int(venue, v) && engine().should_reconnect(v) ? 1 : 0;
+}
+
+extern "C" int mc_request_snapshot(int venue) noexcept {
+    market_classifier::domain::Venue v{};
+    return venue_from_int(venue, v) && engine().take_snapshot_request(v) ? 1 : 0;
+}
+
+extern "C" void mc_engine_frame(int budget_ms) noexcept {
+    try {
+        engine().frame(budget_ms < 0 ? 0 : budget_ms);
+    } catch (...) {
+    }
+}
+
+extern "C" double mc_venue_stat(int venue, int which) noexcept {
+    market_classifier::domain::Venue v{};
+    if (which == 7) {
+        return static_cast<double>(engine().rejected_batches());
+    }
+    if (!venue_from_int(venue, v)) {
+        return -1;
+    }
+    const auto &c = engine().counters(v);
+    switch (which) {
+    case 0:
+        return static_cast<double>(c.frames_received);
+    case 1:
+        return static_cast<double>(c.frames_adapted);
+    case 2:
+        return static_cast<double>(c.frames_dropped);
+    case 3:
+        return static_cast<double>(c.events);
+    case 4:
+        return static_cast<double>(c.reconnects);
+    case 5:
+        return static_cast<double>(engine().queued_frames(v));
+    case 6:
+        return static_cast<double>(engine().feed(v).phase());
+    default:
+        return -1;
+    }
 }

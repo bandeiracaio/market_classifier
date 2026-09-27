@@ -85,6 +85,15 @@ SyncAction BinanceBookSync::on_delta(const domain::BookDelta &delta,
     return action;
 }
 
+void BinanceBookSync::reset() noexcept {
+    state_ = SyncState::AwaitingSnapshot;
+    book_.clear();
+    buffer_.clear();
+    snapshot_id_.reset();
+    last_final_id_      = 0;
+    snapshot_requested_ = false;
+}
+
 SyncAction BinanceBookSync::on_snapshot(const domain::BookSnapshot &snapshot) {
     if (!snapshot.source_sequence) {
         return gap();

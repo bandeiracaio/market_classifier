@@ -47,7 +47,7 @@ void load(std::vector<domain::BookLevel> &side, const std::vector<domain::BookLe
     }
     std::stable_sort(side.begin(), side.end(),
                      [&](const auto &a, const auto &b) { return before(a.price, b.price); });
-    // Duplicate prices in a snapshot: keep the last occurrence's position-stable first.
+    // Duplicate prices in a snapshot: the first occurrence wins (stable sort).
     side.erase(std::unique(side.begin(), side.end(),
                            [](const auto &a, const auto &b) { return a.price == b.price; }),
                side.end());

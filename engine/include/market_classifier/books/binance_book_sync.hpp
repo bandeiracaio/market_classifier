@@ -24,6 +24,9 @@ class BinanceBookSync {
 
     SyncAction on_delta(const domain::BookDelta &delta, std::uint64_t prev_final_update_id);
     SyncAction on_snapshot(const domain::BookSnapshot &snapshot);
+    // Socket reconnect: the diff stream restarts, so discard the book and wait for a new
+    // snapshot. Counters survive.
+    void reset() noexcept;
 
     [[nodiscard]] SyncState state() const noexcept { return state_; }
     [[nodiscard]] const OrderBook &book() const noexcept { return book_; }
