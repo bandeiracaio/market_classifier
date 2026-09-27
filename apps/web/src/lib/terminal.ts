@@ -150,7 +150,11 @@ export function loadTerminal(callbacks: LoadCallbacks): void {
 					}
 				}
 			});
-			if (!timedOut) startDrivers(module as unknown as EngineExports);
+			if (!timedOut) {
+				// Debug/test hooks (e.g. _mc_debug_open_panel) are reachable from Playwright.
+				(window as unknown as { mcTerminal?: unknown }).mcTerminal = module;
+				startDrivers(module as unknown as EngineExports);
+			}
 		} catch (err: unknown) {
 			clearTimeout(timeout);
 			if (!timedOut) {

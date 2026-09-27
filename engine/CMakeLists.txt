@@ -46,18 +46,49 @@ elseif(MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# UI library — panels and workspace; reads engine read models only
+# ---------------------------------------------------------------------------
+add_library(mc_ui STATIC
+    src/ui/panel_host.cpp
+    src/ui/panel_registry.cpp
+    src/ui/panels/bbo_spread.cpp
+    src/ui/panels/candles.cpp
+    src/ui/panels/cvd.cpp
+    src/ui/panels/depth.cpp
+    src/ui/panels/diagnostics.cpp
+    src/ui/panels/footprint.cpp
+    src/ui/panels/funding_oi.cpp
+    src/ui/panels/heatmap.cpp
+    src/ui/panels/ladder.cpp
+    src/ui/panels/liquidations.cpp
+    src/ui/panels/overview.cpp
+    src/ui/panels/trades_tape.cpp
+    src/ui/panels/volume_profile.cpp
+)
+target_include_directories(mc_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(mc_ui PUBLIC mc_domain mc_imgui mc_implot)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(mc_ui PRIVATE -Wall -Wextra -Wpedantic -Werror -Wno-unused-parameter)
+elseif(MSVC)
+    target_compile_options(mc_ui PRIVATE /W4 /WX /wd4100 /wd4267 /utf-8 /D_CRT_SECURE_NO_WARNINGS)
+endif()
+
+# ---------------------------------------------------------------------------
 # Terminal executable / WASM module
 # ---------------------------------------------------------------------------
 add_executable(market_classifier
     src/main.cpp
+    src/app/app.cpp
 )
 
 target_include_directories(market_classifier PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_link_libraries(market_classifier PRIVATE
     mc_domain
+    mc_ui
     mc_imgui
     mc_implot
 )
@@ -106,7 +137,7 @@ if(EMSCRIPTEN)
         "SHELL:-s EXPORT_NAME=MarketClassifier"
         "SHELL:-s MODULARIZE=1"
         "SHELL:-s EXPORTED_RUNTIME_METHODS=['HEAPU8']"
-        "SHELL:-s EXPORTED_FUNCTIONS=['_main','_mc_bridge_decode','_mc_bridge_submit','_mc_bridge_result_name','_mc_bridge_read_model_events','_mc_bridge_dropped_batches','_mc_submit_raw','_mc_socket_event','_mc_should_reconnect','_mc_request_snapshot','_mc_metadata_failed','_mc_retry_venue','_mc_engine_frame','_mc_venue_stat','_malloc','_free']"
+        "SHELL:-s EXPORTED_FUNCTIONS=['_main','_mc_bridge_decode','_mc_bridge_submit','_mc_bridge_result_name','_mc_bridge_read_model_events','_mc_bridge_dropped_batches','_mc_submit_raw','_mc_socket_event','_mc_should_reconnect','_mc_request_snapshot','_mc_metadata_failed','_mc_retry_venue','_mc_engine_frame','_mc_venue_stat','_mc_debug_open_panel','_malloc','_free']"
     )
 
     # Copy .wasm alongside .js — Emscripten generates both with matching names

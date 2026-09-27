@@ -21,6 +21,7 @@ add_executable(mc_tests
     test_processors_heatmap.cpp
     test_processors_metrics.cpp
     test_replay_mvp.cpp
+    test_panel_registry.cpp
     test_runtime.cpp
     test_replay.cpp
     test_version.cpp
@@ -33,6 +34,7 @@ target_include_directories(mc_tests PRIVATE
 target_link_libraries(mc_tests PRIVATE
     Catch2::Catch2WithMain
     mc_domain
+    mc_ui
 )
 
 target_compile_definitions(mc_tests PRIVATE MC_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

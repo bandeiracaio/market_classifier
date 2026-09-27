@@ -1,8 +1,7 @@
-// Market Classifier terminal — M0 feasibility spike.
+// Market Classifier terminal — platform entry point.
 //
-// Boots a full-window Dear ImGui docking canvas with two dockable panels:
-//   1. Lissajous plot (ImPlot, deterministic seeded data)
-//   2. Build info panel
+// Creates the SDL window and GL context, initializes Dear ImGui (docking) and ImPlot,
+// and runs the frame loop. The terminal UI itself lives in app/app.cpp.
 //
 // Platform matrix:
 //   Native Windows/Linux: SDL2 + OpenGL 3.3 Core + imgui_impl_opengl3
@@ -18,13 +17,14 @@
 #include "market_classifier/bridge/browser_api.hpp"
 #include "market_classifier/bridge/protocol.hpp"
 #include "market_classifier/domain/events.hpp"
-#include "market_classifier/runtime/engine.hpp"
 #include "market_classifier/version.hpp"
 
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl2.h"
 #include "implot.h"
+
+#include "app/app.hpp"
 
 // On native Windows/Linux: prevent SDL2 from redefining main() via SDL_main.h.
 // SDL_SetMainReady() must be called before SDL_Init() when this macro is defined.
@@ -48,36 +48,11 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
-#include <numbers>
 
-// ---------------------------------------------------------------------------
-// Lissajous curve — deterministic, generated once at startup, never touches
-// the network.  Parameters are compile-time constants to ensure reproducibility.
-// ---------------------------------------------------------------------------
 namespace {
 
-constexpr int k_lissajous_points     = 512;
-constexpr float k_freq_x             = 3.0f;
-constexpr float k_freq_y             = 2.0f;
-constexpr float k_phase              = static_cast<float>(std::numbers::pi / 4.0);
 constexpr int k_timing_warmup_frames = 30;
 constexpr int k_timing_sample_frames = 120;
-
-struct LissajousData {
-    std::array<double, k_lissajous_points> xs{};
-    std::array<double, k_lissajous_points> ys{};
-
-    LissajousData() noexcept {
-        for (int i = 0; i < k_lissajous_points; ++i) {
-            const double t = (2.0 * std::numbers::pi * i) / (k_lissajous_points - 1);
-            xs[i]          = std::sin(k_freq_x * t + k_phase);
-            ys[i]          = std::sin(k_freq_y * t);
-        }
-    }
-};
-
-// Initialized once; no heap allocation in the render loop.
-const LissajousData k_lissajous{};
 
 // ---------------------------------------------------------------------------
 // Application state — struct kept here so MainLoopStep can be a plain function
@@ -169,11 +144,7 @@ void RunBridgeSmokeOnce() {
 // ---------------------------------------------------------------------------
 // Main loop step — must be a plain void() function for emscripten_set_main_loop.
 // ---------------------------------------------------------------------------
-// Frame-loop drain budget for venue data (spec §7.2); the rest of the frame renders.
-constexpr std::int64_t k_engine_budget_ms = 4;
-
 void MainLoopStep() noexcept {
-    market_classifier::bridge::app_engine().frame(k_engine_budget_ms);
 #ifdef __EMSCRIPTEN__
     const double render_started_ms = emscripten_get_now();
     if (!g_state.bridge_smoke_sent) {
@@ -197,68 +168,7 @@ void MainLoopStep() noexcept {
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
 
-    // Full-window dockspace — panels dock into this invisible host window.
-    ImGuiViewport *viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
-    ImGui::SetNextWindowViewport(viewport->ID);
-
-    constexpr ImGuiWindowFlags dockspace_flags =
-        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
-        ImGuiWindowFlags_NoBackground;
-
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::Begin("##dockspace_root", nullptr, dockspace_flags);
-    ImGui::PopStyleVar(3);
-
-    ImGuiID dockspace_id = ImGui::GetID("RootDockSpace");
-    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
-    ImGui::End();
-
-    // ---------------------------------------------------------------------------
-    // Panel 1 — Lissajous curve (ImPlot)
-    // ---------------------------------------------------------------------------
-    ImGui::Begin("Demo: Lissajous [M0]");
-    ImGui::TextUnformatted("Market Classifier — M0 toolchain spike");
-    ImGui::Text("Version: %s", market_classifier::k_version_string.data());
-    ImGui::Text("Frame:   %d", g_state.frame);
-    ImGui::Separator();
-    ImGui::TextUnformatted("Lissajous 3:2 (deterministic — not market data)");
-
-    if (ImPlot::BeginPlot("##lissajous", ImVec2(-1, -1),
-                          ImPlotFlags_NoBoxSelect | ImPlotFlags_NoMouseText)) {
-        ImPlot::SetupAxes("x", "y", ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickLabels,
-                          ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickLabels);
-        ImPlot::SetupAxesLimits(-1.1, 1.1, -1.1, 1.1, ImPlotCond_Always);
-        ImPlot::PlotLine("lissajous_3_2", k_lissajous.xs.data(), k_lissajous.ys.data(),
-                         k_lissajous_points);
-        ImPlot::EndPlot();
-    }
-    ImGui::End();
-
-    // ---------------------------------------------------------------------------
-    // Panel 2 — Build info
-    // A second dockable window satisfies: "at least two ImGui windows can
-    // dock/tab/resize" (M0 acceptance checklist).
-    // ---------------------------------------------------------------------------
-    ImGui::Begin("Build Info [M0]");
-    ImGui::TextUnformatted("Toolchain spike — no exchange connections");
-    ImGui::Separator();
-    ImGui::Text("Engine version: %s", market_classifier::k_version_string.data());
-#ifdef __EMSCRIPTEN__
-    ImGui::TextUnformatted("Runtime:  WebAssembly / WebGL 2");
-    ImGui::TextUnformatted("Backend:  SDL2 + OpenGL ES 3 (Emscripten port)");
-#else
-    ImGui::TextUnformatted("Runtime:  native");
-    ImGui::TextUnformatted("Backend:  SDL2 + OpenGL 3.3 Core (desktop)");
-#endif
-    ImGui::Separator();
-    ImGui::TextUnformatted("Drag this window onto the Lissajous panel to tab/dock.");
-    ImGui::End();
+    market_classifier::app::frame();
 
     // Render
     ImGui::Render();
@@ -371,6 +281,7 @@ int main(int /*argc*/, char * /*argv*/[]) {
 
     ImGui_ImplSDL2_InitForOpenGL(g_state.window, g_state.gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
+    market_classifier::app::init();
 
 #ifdef __EMSCRIPTEN__
     // Browser requires a non-blocking loop driven by requestAnimationFrame.
