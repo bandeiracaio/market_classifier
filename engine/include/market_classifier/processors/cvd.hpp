@@ -10,9 +10,9 @@ namespace market_classifier::processors {
 
 struct CvdPoint {
     std::int64_t minute_ms = 0;
-    domain::Decimal value{}; // CVD at the last trade of the minute
-    bool gap   = false;      // continuity broken inside/before this minute
-    bool reset = false;      // daily reset happened in this minute
+    domain::Decimal value; // CVD at the last trade of the minute
+    bool gap   = false;    // continuity broken inside/before this minute
+    bool reset = false;    // daily reset happened in this minute
 };
 
 // Cumulative volume delta in base units (docs/calculations/cvd.md): buy aggressor adds
@@ -33,18 +33,21 @@ class Cvd {
     [[nodiscard]] bool failed() const noexcept { return failed_; }
     [[nodiscard]] std::int64_t last_update_ms() const noexcept { return last_update_ms_; }
 
-    bool daily_reset_enabled = false; // at 00:00 UTC by trade source_time
+    // Reset to zero at 00:00 UTC, decided by trade source_time.
+    void set_daily_reset(bool enabled) noexcept { daily_reset_enabled_ = enabled; }
+    [[nodiscard]] bool daily_reset() const noexcept { return daily_reset_enabled_; }
 
   private:
     CvdPoint &point_for(std::int64_t minute);
 
-    domain::Decimal value_{};
+    domain::Decimal value_;
     runtime::Ring<CvdPoint, k_series_minutes> series_;
     std::int64_t last_day_       = -1;
     std::int64_t last_update_ms_ = 0;
     std::uint64_t unknown_       = 0;
     std::uint64_t gaps_          = 0;
     bool failed_                 = false;
+    bool daily_reset_enabled_    = false;
 };
 
 } // namespace market_classifier::processors

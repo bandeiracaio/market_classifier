@@ -39,7 +39,7 @@ class BinanceBookSync {
   private:
     struct Pending {
         domain::BookDelta delta;
-        std::uint64_t prev;
+        std::uint64_t prev = 0;
     };
 
     SyncAction buffer(const domain::BookDelta &delta, std::uint64_t prev);

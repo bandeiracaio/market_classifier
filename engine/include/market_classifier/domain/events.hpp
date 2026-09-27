@@ -101,14 +101,14 @@ struct OpenInterest {
     EventMeta meta;
     Decimal native_quantity;
     std::optional<Decimal> usd_notional;
-    std::int64_t sample_interval_ms;
+    std::int64_t sample_interval_ms = 0;
 };
 
 struct Candle {
     EventMeta meta;
-    std::int64_t interval_ms;
-    std::int64_t open_time_ms;
-    std::int64_t close_time_ms;
+    std::int64_t interval_ms   = 0;
+    std::int64_t open_time_ms  = 0;
+    std::int64_t close_time_ms = 0;
     Decimal open;
     Decimal high;
     Decimal low;
@@ -116,7 +116,7 @@ struct Candle {
     Decimal base_volume;
     std::optional<Decimal> quote_volume;
     std::optional<std::uint64_t> trade_count;
-    bool closed;
+    bool closed = false;
 };
 
 struct Liquidation {
@@ -131,11 +131,11 @@ struct Liquidation {
 
 struct FeedStatus {
     EventMeta meta;
-    FeedLifecycle lifecycle;
-    std::int64_t last_event_age_ms;
-    std::uint32_t reconnect_attempt;
-    GapStatus gap_status;
-    FeedError error;
+    FeedLifecycle lifecycle         = FeedLifecycle::Closed;
+    std::int64_t last_event_age_ms  = 0;
+    std::uint32_t reconnect_attempt = 0;
+    GapStatus gap_status            = GapStatus::None;
+    FeedError error                 = FeedError::None;
 };
 
 using NormalizedEvent =

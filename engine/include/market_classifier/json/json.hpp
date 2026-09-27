@@ -8,9 +8,10 @@
 #include <optional>
 #include <string_view>
 
-// Opaque parser types (ADR-0005: yyjson). Only json.cpp includes yyjson.h.
-struct yyjson_doc;
-struct yyjson_val;
+// Opaque parser types (ADR-0005: yyjson). Only json.cpp includes yyjson.h. The names are
+// yyjson's own C types, so project naming rules do not apply.
+struct yyjson_doc; // NOLINT(readability-identifier-naming)
+struct yyjson_val; // NOLINT(readability-identifier-naming)
 
 namespace market_classifier::json {
 

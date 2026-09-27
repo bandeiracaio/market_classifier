@@ -70,6 +70,8 @@ class Engine {
     ~Engine()                         = default;
     Engine(const Engine &)            = delete;
     Engine &operator=(const Engine &) = delete;
+    Engine(Engine &&)                 = delete;
+    Engine &operator=(Engine &&)      = delete;
 
     // Network side: decode + enqueue only.
     RawSubmit submit_raw(std::span<const std::uint8_t> bytes);

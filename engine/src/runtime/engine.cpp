@@ -141,7 +141,7 @@ std::optional<processors::BasisView> Engine::basis() const {
 }
 
 void Engine::set_cvd_daily_reset(domain::Venue v, bool enabled) {
-    processors_.at(venue_index(v)).cvd.daily_reset_enabled = enabled;
+    processors_.at(venue_index(v)).cvd.set_daily_reset(enabled);
 }
 
 void Engine::reset_cvd(domain::Venue v) {

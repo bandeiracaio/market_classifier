@@ -17,7 +17,8 @@ Checks: >
 
 WarningsAsErrors: "*"
 
-HeaderFilterRegex: "engine/include/market_classifier/.*"
+# Separator-agnostic so Windows and Linux runs check the same headers.
+HeaderFilterRegex: "engine[\\/]include[\\/]market_classifier[\\/].*"
 
 CheckOptions:
   - key:   readability-identifier-naming.ClassCase

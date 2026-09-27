@@ -45,7 +45,7 @@ class InstrumentId {
         : venue_(venue), native_symbol_(std::move(native_symbol)) {}
 
     Venue venue_ = Venue::BinanceUsdM;
-    std::string native_symbol_{};
+    std::string native_symbol_;
 };
 
 struct InstrumentIdResult {
@@ -53,7 +53,7 @@ struct InstrumentIdResult {
                        InstrumentIdError result_error = InstrumentIdError::None)
         : value(std::move(result_value)), error(result_error) {}
 
-    InstrumentId value{};
+    InstrumentId value;
     InstrumentIdError error = InstrumentIdError::None;
 
     [[nodiscard]] explicit operator bool() const noexcept {
@@ -131,7 +131,7 @@ class EventMeta {
         : instrument_(std::move(instrument)), source_time_(source_time),
           receive_time_(receive_time), local_sequence_(local_sequence), quality_(quality) {}
 
-    InstrumentId instrument_{};
+    InstrumentId instrument_;
     SourceTimeMs source_time_{};
     ReceiveTimeMs receive_time_{};
     LocalSequence local_sequence_{};
@@ -142,7 +142,7 @@ struct EventMetaResult {
     EventMetaResult(EventMeta result_value = {}, EventMetaError result_error = EventMetaError::None)
         : value(std::move(result_value)), error(result_error) {}
 
-    EventMeta value{};
+    EventMeta value;
     EventMetaError error = EventMetaError::None;
 
     [[nodiscard]] explicit operator bool() const noexcept { return error == EventMetaError::None; }

@@ -24,19 +24,19 @@ ReplayResult ReplayHarness::run(std::span<const ReplayEntry> entries) {
     previous_offset       = 0;
     std::size_t submitted = 0;
     for (const auto &entry : entries) {
-        if (!clock_.advance_ms(entry.offset_ms - previous_offset)) {
+        if (!clock_->advance_ms(entry.offset_ms - previous_offset)) {
             return {submitted, ReplayError::ClockOverflow};
         }
         previous_offset = entry.offset_ms;
 
         std::vector<domain::NormalizedEvent> events;
         events.push_back(entry.event);
-        const auto result = ingress_.submit({std::move(events), entry.encoded_bytes});
+        const auto result = ingress_->submit({std::move(events), entry.encoded_bytes});
         if (result != SubmitResult::Accepted && result != SubmitResult::AcceptedWithDrop) {
             return {submitted, ReplayError::IngressRejected};
         }
         ++submitted;
-        drain_ingress(ingress_, model_);
+        drain_ingress(*ingress_, *model_);
     }
     return {submitted, ReplayError::None};
 }

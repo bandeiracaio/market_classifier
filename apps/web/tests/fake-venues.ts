@@ -119,10 +119,19 @@ export async function installFakeVenues(page: Page): Promise<void> {
 				this.onmessage?.({ data: JSON.stringify(data) });
 			}
 		}
-		(window as unknown as { WebSocket: unknown }).WebSocket = FakeSocket;
+		// Only venue URLs are faked; anything else (e.g. Vite's dev socket) gets a real socket.
+		const RealWebSocket = window.WebSocket;
+		function PatchedWebSocket(url: string, protocols?: string | string[]) {
+			const venue = url.includes('binance.com') || url.includes('hyperliquid.xyz');
+			return venue ? new FakeSocket(url) : new RealWebSocket(url, protocols);
+		}
+		(window as unknown as { WebSocket: unknown }).WebSocket = PatchedWebSocket;
 		(window as unknown as { fakeVenues: unknown }).fakeVenues = {
-			drop(venue: string) {
-				for (const s of sockets) if (s.readyState === 1 && venueOf(s.url) === venue) s.drop();
+			/** Server-side drop of the venue's open sockets; returns how many were dropped. */
+			drop(venue: string): number {
+				const open = sockets.filter((s) => s.readyState === 1 && venueOf(s.url) === venue);
+				for (const s of open) s.drop();
+				return open.length;
 			},
 			silence(venue: string, ms: number) {
 				silencedUntil[venue] = Date.now() + ms;

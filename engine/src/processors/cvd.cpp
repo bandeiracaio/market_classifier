@@ -23,7 +23,7 @@ void Cvd::on_trade(const domain::Trade &trade) {
     last_update_ms_ = std::max(last_update_ms_, t);
     const auto day  = floor_to_ms(t, k_day_ms) / k_day_ms;
     bool reset_now  = false;
-    if (daily_reset_enabled && last_day_ >= 0 && day > last_day_) {
+    if (daily_reset_enabled_ && last_day_ >= 0 && day > last_day_) {
         value_    = {};
         reset_now = true;
     }

@@ -189,11 +189,11 @@ void WorkspaceController::menu_bar() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("Export workspace...") && on_export_requested) {
-            on_export_requested();
+        if (ImGui::MenuItem("Export workspace...") && on_export_requested_) {
+            on_export_requested_();
         }
-        if (ImGui::MenuItem("Import workspace...") && on_import_requested) {
-            on_import_requested();
+        if (ImGui::MenuItem("Import workspace...") && on_import_requested_) {
+            on_import_requested_();
         }
         ImGui::EndMenu();
     }
@@ -207,11 +207,11 @@ void WorkspaceController::modals() {
             open = false;
         }
         if (ImGui::BeginPopupModal(id, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::InputText("Name", name_buffer_, sizeof name_buffer_);
-            const bool valid = valid_layout_name(name_buffer_);
+            ImGui::InputText("Name", name_buffer_.data(), name_buffer_.size());
+            const bool valid = valid_layout_name(name_buffer_.data());
             ImGui::BeginDisabled(!valid);
             if (ImGui::Button("OK")) {
-                apply(std::string_view(name_buffer_));
+                apply(std::string_view(name_buffer_.data()));
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndDisabled();

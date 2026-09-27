@@ -54,9 +54,9 @@ void apply_actions(runtime::Engine &engine) {
 } // namespace
 
 void init() {
-    ImGui::GetIO().IniFilename       = nullptr; // docking state persists per layout via the bridge
-    controller().on_export_requested = [] { js_request_host_action("export"); };
-    controller().on_import_requested = [] { js_request_host_action("import"); };
+    ImGui::GetIO().IniFilename = nullptr; // docking state persists per layout via the bridge
+    controller().set_file_actions([] { js_request_host_action("export"); },
+                                  [] { js_request_host_action("import"); });
 }
 
 void prepare() {

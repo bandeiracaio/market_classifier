@@ -37,14 +37,15 @@ struct ReplayResult {
 class ReplayHarness {
   public:
     ReplayHarness(FakeClock &clock, BoundedIngress &ingress, DummyReadModel &model) noexcept
-        : clock_(clock), ingress_(ingress), model_(model) {}
+        : clock_(&clock), ingress_(&ingress), model_(&model) {}
 
     [[nodiscard]] ReplayResult run(std::span<const ReplayEntry> entries);
 
   private:
-    FakeClock &clock_;
-    BoundedIngress &ingress_;
-    DummyReadModel &model_;
+    // Borrowed; the harness never outlives the objects it drives.
+    FakeClock *clock_;
+    BoundedIngress *ingress_;
+    DummyReadModel *model_;
 };
 
 } // namespace market_classifier::runtime

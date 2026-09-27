@@ -4,6 +4,7 @@
 #include "market_classifier/ui/workspace.hpp"
 #include "market_classifier/ui/workspace_codec.hpp"
 
+#include <array>
 #include <cstddef>
 #include <functional>
 #include <string>
@@ -40,8 +41,10 @@ class WorkspaceController {
     [[nodiscard]] PanelHost &host_mut() noexcept { return host_; }
 
     // Host (browser) file actions requested from the File menu.
-    std::function<void()> on_export_requested;
-    std::function<void()> on_import_requested;
+    void set_file_actions(std::function<void()> on_export, std::function<void()> on_import) {
+        on_export_requested_ = std::move(on_export);
+        on_import_requested_ = std::move(on_import);
+    }
 
   private:
     void capture_active(); // live panels + ini -> active layout (user layouts only)
@@ -56,7 +59,9 @@ class WorkspaceController {
     bool pending_dock_         = true; // build DockBuilder arrangement on next frame
     bool pending_apply_        = true; // (re)create panels for the active layout
     unsigned int dockspace_id_ = 0;    // ImGuiID of the active layout's dockspace
-    char name_buffer_[k_max_layout_name_bytes + 1]{};
+    std::array<char, k_max_layout_name_bytes + 1> name_buffer_{};
+    std::function<void()> on_export_requested_;
+    std::function<void()> on_import_requested_;
     bool open_save_as_ = false, open_rename_ = false, open_reset_ = false;
 };
 

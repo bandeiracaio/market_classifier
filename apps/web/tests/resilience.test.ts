@@ -28,10 +28,13 @@ test.describe('venue resilience (requires WASM build)', () => {
 				window as unknown as { mcTerminal: { _mc_venue_stat(v: number, w: number): number } }
 			).mcTerminal._mc_venue_stat(0, 4)
 		);
-		await page.evaluate(() =>
-			(window as unknown as { fakeVenues: { drop(v: string): void } }).fakeVenues.drop(
-				'hyperliquid'
-			)
+		// The dev server may reload the page once while optimizing dependencies; retry until the
+		// current document's Hyperliquid socket is actually dropped.
+		await page.waitForFunction(
+			() =>
+				(window as unknown as { fakeVenues: { drop(v: string): number } }).fakeVenues.drop(
+					'hyperliquid'
+				) > 0
 		);
 		await page.waitForFunction(() => document.body.dataset.hyperliquidPhase === '3');
 		expect(await phase(page, 'hyperliquid')).toBe(RECONNECTING);

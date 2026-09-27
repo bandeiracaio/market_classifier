@@ -36,8 +36,8 @@ TEST_CASE("cvd series has one point per minute with the minute close") {
 
 TEST_CASE("cvd daily reset at 00:00 UTC by source time") {
     processors::Cvd cvd;
-    cvd.daily_reset_enabled = true;
-    const std::int64_t day  = 86'400'000;
+    cvd.set_daily_reset(true);
+    const std::int64_t day = 86'400'000;
     cvd.on_trade(trade(3 * day - 1, "1", "5", AggressorSide::Buy));
     CHECK(cvd.value() == dec("5"));
     cvd.on_trade(trade(3 * day, "1", "2", AggressorSide::Sell));

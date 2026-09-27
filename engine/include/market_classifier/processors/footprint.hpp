@@ -13,9 +13,9 @@ namespace market_classifier::processors {
 // One price bucket: `bid_volume` = sell-aggressor volume (hit the bid), `ask_volume` =
 // buy-aggressor volume (lifted the ask). Base units. docs/calculations/footprint.md.
 struct FootprintCell {
-    domain::Decimal price{}; // bucket floor
-    domain::Decimal bid_volume{};
-    domain::Decimal ask_volume{};
+    domain::Decimal price; // bucket floor
+    domain::Decimal bid_volume;
+    domain::Decimal ask_volume;
 };
 
 struct FootprintCandle {

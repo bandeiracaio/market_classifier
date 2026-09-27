@@ -148,6 +148,8 @@ test.describe('WASM terminal (requires WASM build)', () => {
 		const unexpected: string[] = [];
 		page.on('websocket', (ws) => {
 			const url = ws.url();
+			const local = url.startsWith('ws://localhost') || url.startsWith('ws://127.0.0.1'); // dev server
+			if (local) return;
 			if (!allowedSockets.some((prefix) => url.startsWith(prefix)) || url.includes('listenKey')) {
 				unexpected.push(url);
 			}

@@ -47,6 +47,11 @@ struct PanelSettings {
 
 class Panel {
   public:
+    Panel()                                      = default;
+    Panel(const Panel &)                         = delete;
+    Panel &operator=(const Panel &)              = delete;
+    Panel(Panel &&)                              = delete;
+    Panel &operator=(Panel &&)                   = delete;
     virtual ~Panel()                             = default;
     [[nodiscard]] virtual PanelKind kind() const = 0;
     // Reads only engine read models. Settings may be edited by the panel's controls.

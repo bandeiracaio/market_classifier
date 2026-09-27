@@ -11,13 +11,13 @@ namespace market_classifier::processors {
 
 struct SeriesPoint {
     std::int64_t t_ms = 0; // minute (OI, funding) or second (spread) bucket start
-    domain::Decimal value{};
+    domain::Decimal value;
 };
 
 struct SpreadPoint {
     std::int64_t t_ms = 0; // second bucket start
-    domain::Decimal spread{};
-    domain::Decimal mid{};
+    domain::Decimal spread;
+    domain::Decimal mid;
 };
 
 struct MetricsView {
@@ -49,9 +49,9 @@ class Metrics {
 };
 
 struct BasisView {
-    domain::Decimal binance_mid{};
-    domain::Decimal hyperliquid_mid{};
-    domain::Decimal basis{};         // Binance mid - Hyperliquid mid, exact
+    domain::Decimal binance_mid;
+    domain::Decimal hyperliquid_mid;
+    domain::Decimal basis;           // Binance mid - Hyperliquid mid, exact
     double basis_bps            = 0; // basis / Hyperliquid mid * 1e4, half-even 2 dp (display)
     std::int64_t last_update_ms = 0;
 };
