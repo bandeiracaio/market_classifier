@@ -1,5 +1,6 @@
 // Panel smoke (plan Task 9): every PanelKind opens in the real WASM terminal without
 // console errors and the render loop keeps running.
+import { isVenueNoise } from './venue-noise';
 import { test, expect } from '@playwright/test';
 
 const PANEL_KINDS = 13;
@@ -17,7 +18,8 @@ test.describe('panels (requires WASM build)', () => {
 		const errors: string[] = [];
 		page.on('pageerror', (error) => errors.push(error.message));
 		page.on('console', (message) => {
-			if (message.type() === 'error') errors.push(message.text());
+			if (message.type() === 'error' && !isVenueNoise(message.text() + message.location().url))
+				errors.push(message.text());
 		});
 		await page.goto('/');
 		await page.waitForFunction(() => document.body.dataset.wasmStatus === 'ready');

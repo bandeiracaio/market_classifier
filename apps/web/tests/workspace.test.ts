@@ -1,4 +1,5 @@
 // Workspace persistence (plan Task 10 / packet §12 #6). Requires the WASM build.
+import { isVenueNoise } from './venue-noise';
 import { test, expect, type Page } from '@playwright/test';
 
 type Terminal = {
@@ -37,7 +38,9 @@ test.describe('workspace (requires WASM build)', () => {
 	}) => {
 		const errors: string[] = [];
 		page.on('pageerror', (e) => errors.push(e.message));
-		page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+		page.on('console', (m) => {
+			if (m.type() === 'error' && !isVenueNoise(m.text() + m.location().url)) errors.push(m.text());
+		});
 		await page.goto('/');
 		await ready(page);
 		expect(await activeLayoutName(page)).toBe('Overview');

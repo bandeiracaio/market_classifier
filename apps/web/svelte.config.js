@@ -12,6 +12,10 @@ const config = {
 			precompress: false,
 			strict: true
 		}),
+		// GitHub Pages serves the site under /<repo>; CI sets BASE_PATH (empty locally).
+		paths: {
+			base: process.env.BASE_PATH ?? ''
+		},
 		// No server-side rendering for the canvas terminal
 		prerender: {
 			handleHttpError: 'warn'

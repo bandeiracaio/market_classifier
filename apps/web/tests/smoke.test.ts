@@ -4,6 +4,7 @@
 // WASM module (data-wasm-status, data-frame-count) and observable DOM state.
 
 import { test, expect } from '@playwright/test';
+import { isVenueNoise } from './venue-noise';
 
 test.describe('host boot', () => {
 	test('page loads without fatal errors', async ({ page }) => {
@@ -11,9 +12,12 @@ test.describe('host boot', () => {
 		const failedRequests: string[] = [];
 		const errorResponses: string[] = [];
 		page.on('pageerror', (error) => pageErrors.push(error.message));
-		page.on('requestfailed', (request) => failedRequests.push(request.url()));
+		page.on('requestfailed', (request) => {
+			if (!isVenueNoise(request.url())) failedRequests.push(request.url());
+		});
 		page.on('response', (response) => {
-			if (response.status() >= 400) errorResponses.push(`${response.status()} ${response.url()}`);
+			if (response.status() >= 400 && !isVenueNoise(response.url()))
+				errorResponses.push(`${response.status()} ${response.url()}`);
 		});
 
 		await page.goto('/');

@@ -27,7 +27,8 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y ninja-build clang-format-18 clang-tidy-18
+          # GL/X11 headers: the native terminal links OpenGL and SDL's video backend.
+          sudo apt-get install -y ninja-build clang-format-18 clang-tidy-18             libgl1-mesa-dev libx11-dev libxext-dev
           sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 100
           sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-18 100
 
@@ -45,13 +46,17 @@ jobs:
           restore-keys: native-deps-
 
       - name: Configure (native-release)
-        run: cmake --preset native-release
+        run: cmake --preset native-release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
         run: cmake --build --preset native-release
 
       - name: Run unit tests
         run: ctest --preset native --output-on-failure
+
+      - name: clang-tidy (engine sources)
+        run: |
+          find engine/src -name '*.cpp' -print0 |             xargs -0 -n1 -P4 clang-tidy -p build/native-release --quiet
 
   # ---------------------------------------------------------------------------
   # clang-format check

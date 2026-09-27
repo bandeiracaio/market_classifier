@@ -28,6 +28,8 @@ import {
 	type WorkspaceTarget
 } from '../../../../bridge/src/persistence';
 
+import { base } from '$app/paths';
+
 export type TerminalStatus = 'loading' | 'ready' | 'error';
 
 interface LoadCallbacks {
@@ -47,6 +49,15 @@ export interface TerminalHandle {
 }
 
 let handle: TerminalHandle | null = null;
+
+/** Reads the chosen file, applies it, and returns the banner text. Clears the input. */
+export async function importWorkspaceFile(input: HTMLInputElement): Promise<string | null> {
+	const file = input.files?.[0];
+	input.value = '';
+	if (!file || !handle) return null;
+	const reason = handle.importWorkspace(await file.text());
+	return reason === null ? 'Workspace imported' : `Import rejected: ${reason}`;
+}
 export function terminalHandle(): TerminalHandle | null {
 	return handle;
 }
@@ -197,7 +208,8 @@ declare global {
 	}
 }
 
-const WASM_JS_PATH = '/wasm/market_classifier.js';
+// Base-path aware so the Pages subpath (/<repo>/wasm/...) resolves.
+const WASM_JS_PATH = `${base}/wasm/market_classifier.js`;
 const LOAD_TIMEOUT_MS = 30_000;
 
 export function loadTerminal(callbacks: LoadCallbacks): void {
@@ -238,7 +250,7 @@ export function loadTerminal(callbacks: LoadCallbacks): void {
 			const module = await factory({
 				canvas,
 				// Emscripten locateFile resolves sibling WASM binary relative to the JS glue
-				locateFile: (path: string) => `/wasm/${path}`,
+				locateFile: (path: string) => `${base}/wasm/${path}`,
 				onRuntimeInitialized: () => {
 					clearTimeout(timeout);
 					if (!timedOut) {

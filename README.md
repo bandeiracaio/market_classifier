@@ -2,7 +2,11 @@
 
 An open-source, local-first web terminal for inspecting live perpetual-futures market data.  The terminal engine is C++20 with Dear ImGui, compiled to WebAssembly via Emscripten and rendered through WebGL 2.  A minimal SvelteKit shell hosts the terminal.
 
-**Status: M0 — toolchain and architecture feasibility spike.**  No exchange connections exist yet.
+**Status: MVP — BTC perpetual order-flow terminal** (`docs/milestones/MVP_BTC_TERMINAL.md`).
+Live public data for Binance USD-M `BTCUSDT` and Hyperliquid `BTC`: overview, trades tape,
+order book, depth, candles, CVD, footprint, volume profile, liquidity heatmap, liquidations,
+BBO/spread and funding/OI panels in five dockable presets, with layouts saved in the browser.
+No accounts, no backend, no trading. Market data is never persisted.
 
 ---
 
@@ -19,7 +23,7 @@ Install the tools below.  Exact versions are in `docs/toolchain.md`.
 | CMake | ≥ 3.28 (3.29.6 pinned) | https://cmake.org/download/ |
 | Ninja | 1.12.1 | https://github.com/ninja-build/ninja/releases |
 | Emscripten SDK | 3.1.67 | See below |
-| clang-format 18 | 18.x | OS package manager or https://releases.llvm.org/ |
+| clang-format / clang-tidy | 18.x | OS package manager, https://releases.llvm.org/, or `pip install clang-format==18.1.8 clang-tidy==18.1.8` |
 
 #### Install Emscripten (Windows)
 
@@ -182,3 +186,24 @@ Third-party dependencies and their licenses:
 ## Contributing
 
 See `CONTRIBUTING.md`.
+
+
+---
+
+## Deployment (GitHub Pages)
+
+`.github/workflows/pages.yml` builds the WASM terminal and the static site on every push to
+`main` and deploys it to GitHub Pages under `/<repo>` (the build sets `BASE_PATH` from the
+Pages configuration). One-time setup: repository Settings → Pages → Source: **GitHub Actions**.
+
+Local check of the subpath build:
+
+```bash
+cd apps/web
+BASE_PATH=/market_classifier pnpm build && pnpm preview   # open http://localhost:4173/market_classifier/
+```
+
+Browser requirements: WebGL 2, WebSocket, IndexedDB. The terminal connects directly from the
+browser to `fapi.binance.com` / `fstream.binance.com` and `api.hyperliquid.xyz`; Binance
+restricts some regions, in which case its panels show `Failed`/`Reconnecting` while
+Hyperliquid keeps working.

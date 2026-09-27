@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { loadTerminal, terminalHandle, type TerminalStatus } from '$lib/terminal';
+	import { importWorkspaceFile, loadTerminal, type TerminalStatus } from '$lib/terminal';
 
 	let status = $state<TerminalStatus>('loading');
 	let errorMessage = $state<string | null>(null);
 	let notice = $state<string | null>(null);
-	let fileInput: HTMLInputElement | undefined = $state();
+	let fileInput = $state<HTMLInputElement>();
 
 	onMount(() => {
 		loadTerminal({
@@ -22,18 +22,6 @@
 			onImportRequested: () => fileInput?.click()
 		});
 	});
-
-	// Workspace import: the host only reads the file; the engine validates schema/size.
-	async function onImportFile(event: Event) {
-		const input = event.currentTarget as HTMLInputElement;
-		const file = input.files?.[0];
-		input.value = '';
-		if (!file) return;
-		const handle = terminalHandle();
-		if (!handle) return;
-		const reason = handle.importWorkspace(await file.text());
-		notice = reason === null ? 'Workspace imported' : `Import rejected: ${reason}`;
-	}
 </script>
 
 <svelte:head>
@@ -53,7 +41,7 @@
 		accept="application/json,.json"
 		hidden
 		data-testid="mc-import-input"
-		onchange={onImportFile}
+		onchange={(e) => importWorkspaceFile(e.currentTarget).then((n) => (notice = n))}
 	/>
 	<!-- The Emscripten SDL2 port targets the canvas with id="canvas" by default -->
 	<canvas id="canvas" aria-label="Market Classifier terminal"></canvas>
