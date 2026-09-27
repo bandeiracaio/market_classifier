@@ -1,0 +1,107 @@
+[
+ {
+  "channel": "activeAssetCtx",
+  "data": {
+   "coin": "BTC",
+   "ctx": {
+    "funding": "0.0000125",
+    "openInterest": "37115.06004",
+    "prevDayPx": "83927.0",
+    "dayNtlVlm": "857060217.5145208836",
+    "premium": "-0.0003087406",
+    "oraclePx": "84537.0",
+    "markPx": "84504.0",
+    "midPx": "84504.5",
+    "impactPxs": [
+     "84504.0",
+     "84510.9"
+    ],
+    "dayBaseVlm": "10188.15861"
+   }
+  }
+ },
+ {
+  "channel": "activeAssetCtx",
+  "data": {
+   "coin": "BTC",
+   "ctx": {
+    "funding": "0.0000125",
+    "openInterest": "37115.06004",
+    "prevDayPx": "83927.0",
+    "dayNtlVlm": "857060217.5145208836",
+    "premium": "-0.0003087406",
+    "oraclePx": "84537.0",
+    "markPx": "84504.0",
+    "midPx": "84504.5",
+    "impactPxs": [
+     "84504.0",
+     "84510.9"
+    ],
+    "dayBaseVlm": "10188.15861"
+   }
+  }
+ },
+ {
+  "channel": "activeAssetCtx",
+  "data": {
+   "coin": "BTC",
+   "ctx": {
+    "funding": "0.0000125",
+    "openInterest": "37115.05854",
+    "prevDayPx": "83927.0",
+    "dayNtlVlm": "857060320.6301409006",
+    "premium": "-0.0003087406",
+    "oraclePx": "84537.0",
+    "markPx": "84504.0",
+    "midPx": "84504.5",
+    "impactPxs": [
+     "84504.0",
+     "84510.9"
+    ],
+    "dayBaseVlm": "10188.15983"
+   }
+  }
+ },
+ {
+  "channel": "activeAssetCtx",
+  "data": {
+   "coin": "BTC",
+   "ctx": {
+    "funding": "0.0000125",
+    "openInterest": "37115.05854",
+    "prevDayPx": "83927.0",
+    "dayNtlVlm": "857060320.6301409006",
+    "premium": "-0.0003087406",
+    "oraclePx": "84537.0",
+    "markPx": "84504.0",
+    "midPx": "84504.5",
+    "impactPxs": [
+     "84504.0",
+     "84510.9"
+    ],
+    "dayBaseVlm": "10188.15983"
+   }
+  }
+ },
+ {
+  "channel": "activeAssetCtx",
+  "data": {
+   "coin": "BTC",
+   "ctx": {
+    "funding": "0.0000125",
+    "openInterest": "37115.05854",
+    "prevDayPx": "83927.0",
+    "dayNtlVlm": "857060363.7358509302",
+    "premium": "-0.0003205697",
+    "oraclePx": "84537.0",
+    "markPx": "84504.0",
+    "midPx": "84504.5",
+    "impactPxs": [
+     "84504.0",
+     "84509.9"
+    ],
+    "dayBaseVlm": "10188.16034"
+   }
+  }
+ }
+]
