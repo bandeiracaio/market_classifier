@@ -26,6 +26,8 @@ export interface EngineSink {
   requestSnapshot(venue: VenueId): boolean;
   /** Startup metadata could not be fetched or validated: venue shows Failed with retry. */
   metadataFailed(venue: VenueId): void;
+  /** Frames evicted or rejected before submission: the engine marks a gap. */
+  framesDropped(venue: VenueId, count: number): void;
 }
 
 export interface DriverDeps {
@@ -59,6 +61,9 @@ export class FrameBuffer {
   private frames: RawFrame[] = [];
   private sizes: number[] = [];
   private bytes = 0;
+  private droppedSinceFlush = 0;
+
+  constructor(private readonly venue: VenueId) {}
   readonly stats: DriverStats = {
     framesBuffered: 0,
     framesDropped: 0,
@@ -71,6 +76,7 @@ export class FrameBuffer {
     const size = payloadBytes(payload);
     if (size === 0 || size > MAX_RAW_FRAME_BYTES) {
       this.stats.oversizeDropped++;
+      this.droppedSinceFlush++;
       return;
     }
     while (
@@ -80,6 +86,7 @@ export class FrameBuffer {
       this.frames.shift();
       this.bytes -= this.sizes.shift() ?? 0;
       this.stats.framesDropped++;
+      this.droppedSinceFlush++;
     }
     this.frames.push({ tag, receiveTimeMs: BigInt(Math.trunc(receiveTimeMs)), payload });
     this.sizes.push(size);
@@ -87,8 +94,12 @@ export class FrameBuffer {
     this.stats.framesBuffered = this.frames.length;
   }
 
-  /** Encodes and submits everything buffered as one batch. */
+  /** Encodes and submits everything buffered as one batch; reports evictions first. */
   flush(sink: EngineSink): void {
+    if (this.droppedSinceFlush > 0) {
+      sink.framesDropped(this.venue, this.droppedSinceFlush);
+      this.droppedSinceFlush = 0;
+    }
     if (this.frames.length === 0) return;
     const bytes = encodeRawFrames(this.frames);
     this.frames = [];
@@ -97,6 +108,21 @@ export class FrameBuffer {
     this.stats.framesBuffered = 0;
     this.stats.batchesSubmitted++;
     sink.submitRaw(bytes);
+  }
+
+  /**
+   * REST responses (metadata, preloads, snapshots, OI) are large and rare: submit each
+   * immediately as its own batch so they never compete with stream frames for buffer space.
+   */
+  submitNow(sink: EngineSink, tag: StreamTag, receiveTimeMs: number, payload: string): void {
+    const size = payloadBytes(payload);
+    if (size === 0 || size > MAX_RAW_FRAME_BYTES) {
+      this.stats.oversizeDropped++;
+      this.droppedSinceFlush++;
+      return;
+    }
+    this.stats.batchesSubmitted++;
+    sink.submitRaw(encodeRawFrames([{ tag, receiveTimeMs: BigInt(Math.trunc(receiveTimeMs)), payload }]));
   }
 
   clear(): void {

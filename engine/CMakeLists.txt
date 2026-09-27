@@ -140,7 +140,7 @@ if(EMSCRIPTEN)
         "SHELL:-s EXPORT_NAME=MarketClassifier"
         "SHELL:-s MODULARIZE=1"
         "SHELL:-s EXPORTED_RUNTIME_METHODS=['HEAPU8','UTF8ToString','stringToUTF8','lengthBytesUTF8']"
-        "SHELL:-s EXPORTED_FUNCTIONS=['_main','_mc_bridge_decode','_mc_bridge_result_name','_mc_submit_raw','_mc_socket_event','_mc_should_reconnect','_mc_request_snapshot','_mc_metadata_failed','_mc_retry_venue','_mc_engine_frame','_mc_venue_stat','_mc_debug_open_panel','_mc_debug_activate_layout','_mc_debug_save_layout_as','_mc_workspace_export','_mc_workspace_import','_mc_workspace_reset','_mc_workspace_dirty','_malloc','_free']"
+        "SHELL:-s EXPORTED_FUNCTIONS=['_main','_mc_bridge_decode','_mc_bridge_result_name','_mc_submit_raw','_mc_socket_event','_mc_should_reconnect','_mc_request_snapshot','_mc_metadata_failed','_mc_frames_dropped','_mc_retry_venue','_mc_engine_frame','_mc_venue_stat','_mc_debug_open_panel','_mc_debug_activate_layout','_mc_debug_save_layout_as','_mc_workspace_export','_mc_workspace_import','_mc_workspace_reset','_mc_workspace_dirty','_malloc','_free']"
     )
 
     # Copy .wasm alongside .js — Emscripten generates both with matching names

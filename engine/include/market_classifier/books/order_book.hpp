@@ -17,8 +17,9 @@ class OrderBook {
   public:
     // Replaces both sides; keeps the k_max_book_levels_per_side levels nearest the touch.
     void apply_snapshot(const domain::BookSnapshot &snapshot);
-    // Quantity 0 removes a level. Returns false if a new level was refused by the bound
-    // (all other changes are still applied).
+    // Quantity 0 removes a level. At the per-side bound a new level nearer the touch evicts
+    // the farthest one; a level beyond the farthest is refused (returns false; all other
+    // changes are still applied).
     bool apply_levels(std::span<const domain::BookLevel> bids,
                       std::span<const domain::BookLevel> asks);
     void clear() noexcept;

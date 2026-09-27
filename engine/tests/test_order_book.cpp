@@ -54,11 +54,31 @@ TEST_CASE("order book level bound") {
         many.push_back({domain::Decimal::from_parts(static_cast<std::int64_t>(i), 0).value,
                         dec("1"), std::nullopt});
     }
-    CHECK_FALSE(book.apply_levels(many, {}));
-    CHECK(book.bids().size() <= books::k_max_book_levels_per_side);
+    // Ascending bids: each new one is nearer the touch, so the farthest is evicted and
+    // the bound holds (final review fix; previously the better level was refused).
+    CHECK(book.apply_levels(many, {}));
+    CHECK(book.bids().size() == books::k_max_book_levels_per_side);
+    CHECK(book.best_bid()->price == domain::Decimal::from_parts(5001, 0).value);
     domain::BookSnapshot s;
     s.asks = many;
     book.apply_snapshot(s);
     CHECK(book.asks().size() == books::k_max_book_levels_per_side);
     CHECK(book.asks()[0].price == dec("1")); // nearest levels kept
+}
+
+TEST_CASE("a full side evicts its farthest level to admit one nearer the touch") {
+    books::OrderBook book;
+    std::vector<domain::BookLevel> many;
+    for (std::size_t i = 1; i <= books::k_max_book_levels_per_side; ++i) {
+        many.push_back({domain::Decimal::from_parts(static_cast<std::int64_t>(i), 0).value,
+                        dec("1"), std::nullopt});
+    }
+    REQUIRE(book.apply_levels(many, {}));
+    const std::vector<domain::BookLevel> better{lvl("100000", "2")};
+    CHECK(book.apply_levels(better, {}));
+    CHECK(book.bids().size() == books::k_max_book_levels_per_side);
+    CHECK(book.best_bid()->price == dec("100000"));
+    CHECK(book.bids().back().price == dec("2")); // level 1 (farthest bid) evicted
+    const std::vector<domain::BookLevel> worse{lvl("0.5", "1")};
+    CHECK_FALSE(book.apply_levels(worse, {})); // beyond the tail: refused
 }

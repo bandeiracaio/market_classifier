@@ -47,3 +47,8 @@ infers liquidations from trades (packet §4.2).
 - Live `candle` frames have no closed flag; closed ⇔ `T < receive_time`. In a
   `candleSnapshot` every bar but the newest is closed.
 - Trade notional treats USDC as USD.
+- `trades` replays recent trades on subscribe: in the 2026-09-27 capture the first frame held
+  30 trades spanning 33 s before the subscription. The subscriptions page (read 2026-09-27)
+  only documents snapshots for user feeds. The engine therefore drops trades whose `tid` was
+  seen in the last 1,024 trades (`runtime::k_trade_dedupe_window`), so reconnects do not
+  double-count CVD/footprint.

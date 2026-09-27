@@ -80,6 +80,7 @@ interface EngineExports {
 	_mc_should_reconnect(venue: number): number;
 	_mc_request_snapshot(venue: number): number;
 	_mc_metadata_failed(venue: number): void;
+	_mc_frames_dropped(venue: number, count: number): void;
 	_mc_venue_stat(venue: number, which: number): number;
 	_mc_workspace_export(): number;
 	_mc_workspace_import(ptr: number, size: number): number;
@@ -169,7 +170,8 @@ function createSink(m: EngineExports): EngineSink {
 		socketEvent: (venue: VenueId, kind) => m._mc_socket_event(venue, kind),
 		shouldReconnect: (venue: VenueId) => m._mc_should_reconnect(venue) === 1,
 		requestSnapshot: (venue: VenueId) => m._mc_request_snapshot(venue) === 1,
-		metadataFailed: (venue: VenueId) => m._mc_metadata_failed(venue)
+		metadataFailed: (venue: VenueId) => m._mc_metadata_failed(venue),
+		framesDropped: (venue: VenueId, count: number) => m._mc_frames_dropped(venue, count)
 	};
 }
 

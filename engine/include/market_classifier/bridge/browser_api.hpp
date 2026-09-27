@@ -25,6 +25,8 @@ void mc_socket_event(int venue, int kind) noexcept;
 [[nodiscard]] int mc_should_reconnect(int venue) noexcept;
 [[nodiscard]] int mc_request_snapshot(int venue) noexcept;
 void mc_metadata_failed(int venue) noexcept;
+// Frames the TS driver evicted before submission (buffer bounds); marks a gap.
+void mc_frames_dropped(int venue, int count) noexcept;
 void mc_retry_venue(int venue) noexcept;
 // Drains queued frames within `budget_ms`; called once per animation frame.
 void mc_engine_frame(int budget_ms) noexcept;

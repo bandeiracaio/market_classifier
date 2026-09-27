@@ -71,6 +71,10 @@ function makeSink(overrides = {}) {
     metadataFailed(venue) {
       this.failed.push(venue);
     },
+    drops: [],
+    framesDropped(venue, count) {
+      this.drops.push([venue, count]);
+    },
     ...overrides,
   };
   return sink;
@@ -115,8 +119,8 @@ test("binance opens both routed sockets with exact URLs after metadata", async (
   assert.deepEqual(sink.events, []); // venue opens only when both routes are up
   FakeSocket.instances[1].open();
   assert.deepEqual(sink.events, [[0, 0]]);
-  driver.pump(0);
-  assert.equal(sink.batches.length, 1);
+  // REST responses are submitted immediately: exchangeInfo first, then 6 kline preloads.
+  assert.equal(sink.batches.length, 7);
   const payload = new TextDecoder().decode(sink.batches[0]);
   assert.ok(payload.includes('"BTCUSDT"'));
   assert.ok(!payload.includes("ETHUSDT"));
@@ -136,6 +140,8 @@ test("100 messages then pump submits exactly one batch of at most 64 frames", as
   assert.equal(sink.batches.length, 1);
   assert.equal(frameCount(sink.batches[0]), MAX_FRAMES_PER_BATCH);
   assert.equal(driver.stats().framesDropped, 100 - MAX_FRAMES_PER_BATCH);
+  // Evictions are reported to the engine so views show a gap instead of silent loss.
+  assert.deepEqual(sink.drops, [[0, 100 - MAX_FRAMES_PER_BATCH]]);
   // Newest frames survive.
   assert.ok(new TextDecoder().decode(sink.batches[0]).includes('{"i":99}'));
 });
@@ -153,6 +159,8 @@ test("oversize frame is dropped and counted", async () => {
   FakeSocket.instances[0].open();
   FakeSocket.instances[0].message("x".repeat(MAX_RAW_FRAME_BYTES + 1));
   assert.equal(driver.stats().oversizeDropped, 1);
+  driver.pump(0);
+  assert.deepEqual(sink.drops, [[1, 1]]);
 });
 
 test("hyperliquid subscribes to every BTC channel with exact JSON and pings", async () => {
@@ -262,4 +270,18 @@ test("metadata failure is reported and retried when the engine allows", async ()
   driver.pump(0);
   await settle();
   assert.equal(fetch.calls.filter((c) => c.url.includes("exchangeInfo")).length, 2);
+});
+
+test("REST responses bypass the frame buffer so large preloads are never evicted", async () => {
+  FakeSocket.instances = [];
+  const sink = makeSink();
+  const big = "[" + '[1,"1","1","1","1","1",2,"1",1,"1","1","0"],'.repeat(6000) + "[]]"; // ~300 KB
+  const fetch = fakeFetch([["exchangeInfo", exchangeInfo], ["klines", big]]);
+  const driver = createBinanceDriver(sink, { WebSocket: FakeSocket, fetch, now: () => 1 });
+  driver.start();
+  await settle();
+  // exchangeInfo + 6 kline payloads, each submitted as its own batch before any pump.
+  assert.equal(sink.batches.length, 7);
+  assert.ok(sink.batches.every((b) => frameCount(b) === 1));
+  assert.deepEqual(sink.drops, []);
 });

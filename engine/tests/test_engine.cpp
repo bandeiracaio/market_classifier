@@ -149,3 +149,96 @@ TEST_CASE("metadata failure fails only that venue and retry restarts it") {
     e.retry(domain::Venue::BinanceUsdM);
     CHECK(e.should_reconnect(domain::Venue::BinanceUsdM));
 }
+
+// --- Final-review fixes (docs/reviews/mvp-verification.md) ---
+
+TEST_CASE("replayed Hyperliquid trades after reconnect are not double-counted") {
+    runtime::FakeClock clock;
+    runtime::Engine e(clock);
+    e.on_socket_event(domain::Venue::Hyperliquid, runtime::SocketEvent::Open);
+    const auto frame = mc_test::load_frame("hyperliquid/trades.json", StreamTag::HyperliquidWs, 1);
+    REQUIRE(e.submit_raw(batch(frame.tag, frame.payload)) == runtime::RawSubmit::Accepted);
+    e.frame(16);
+    const auto tape = e.view(domain::Venue::Hyperliquid).tape.trades().size();
+    const auto cvd  = e.view(domain::Venue::Hyperliquid).cvd.value();
+    REQUIRE(tape == 30);
+    // Hyperliquid replays recent trades on (re)subscribe (observed 2026-09-27).
+    e.on_socket_event(domain::Venue::Hyperliquid, runtime::SocketEvent::Close);
+    e.on_socket_event(domain::Venue::Hyperliquid, runtime::SocketEvent::Open);
+    REQUIRE(e.submit_raw(batch(frame.tag, frame.payload)) == runtime::RawSubmit::Accepted);
+    e.frame(16);
+    CHECK(e.view(domain::Venue::Hyperliquid).tape.trades().size() == tape);
+    CHECK(e.view(domain::Venue::Hyperliquid).cvd.value() == cvd);
+    CHECK(e.counters(domain::Venue::Hyperliquid).duplicate_trades == 30);
+}
+
+TEST_CASE("binance aggTrade id gap marks a discontinuity") {
+    runtime::FakeClock clock;
+    runtime::Engine e(clock);
+    e.on_socket_event(domain::Venue::BinanceUsdM, runtime::SocketEvent::Open);
+    const auto trade = [](int id) {
+        return R"({"stream":"btcusdt@aggTrade","data":{"e":"aggTrade","s":"BTCUSDT","a":)" +
+               std::to_string(id) + R"(,"p":"1","q":"1","T":1000,"m":false}})";
+    };
+    for (const int id : {10, 11, 12}) {
+        REQUIRE(e.submit_raw(batch(StreamTag::BinanceWs, trade(id))) ==
+                runtime::RawSubmit::Accepted);
+    }
+    e.frame(16);
+    CHECK(e.view(domain::Venue::BinanceUsdM).cvd.gap_count() == 0);
+    REQUIRE(e.submit_raw(batch(StreamTag::BinanceWs, trade(20))) == runtime::RawSubmit::Accepted);
+    REQUIRE(e.submit_raw(batch(StreamTag::BinanceWs, trade(20))) == runtime::RawSubmit::Accepted);
+    e.frame(16);
+    CHECK(e.view(domain::Venue::BinanceUsdM).cvd.gap_count() == 1);
+    CHECK(e.view(domain::Venue::BinanceUsdM).tape.trades().size() == 4); // duplicate 20 dropped
+}
+
+TEST_CASE("frames dropped by the browser buffer mark a gap") {
+    runtime::FakeClock clock;
+    runtime::Engine e(clock);
+    feed_live(e, domain::Venue::Hyperliquid);
+    e.on_frames_dropped(domain::Venue::Hyperliquid, 7);
+    CHECK(e.counters(domain::Venue::Hyperliquid).frames_dropped == 7);
+    CHECK(e.view(domain::Venue::Hyperliquid).cvd.gap_count() == 1);
+    CHECK(e.view(domain::Venue::BinanceUsdM).cvd.gap_count() == 0);
+}
+
+TEST_CASE("an unanswered depth snapshot request is retried after a timeout") {
+    runtime::FakeClock clock;
+    runtime::Engine e(clock);
+    e.on_socket_event(domain::Venue::BinanceUsdM, runtime::SocketEvent::Open);
+    const auto lines = mc_test::read_lines("binance/depth_sequence.jsonl");
+    REQUIRE(e.submit_raw(batch(StreamTag::BinanceWs, lines[1])) == runtime::RawSubmit::Accepted);
+    e.frame(16);
+    REQUIRE(e.take_snapshot_request(domain::Venue::BinanceUsdM));
+    REQUIRE(clock.advance_ms(runtime::k_snapshot_retry_ms - 1));
+    e.frame(16);
+    CHECK_FALSE(e.take_snapshot_request(domain::Venue::BinanceUsdM));
+    REQUIRE(clock.advance_ms(1));
+    e.frame(16);
+    CHECK(e.take_snapshot_request(domain::Venue::BinanceUsdM)); // REST failed or was rejected
+}
+
+TEST_CASE("rejected startup metadata fails only that venue") {
+    runtime::FakeClock clock;
+    runtime::Engine e(clock);
+    feed_live(e, domain::Venue::Hyperliquid);
+    e.on_socket_event(domain::Venue::BinanceUsdM, runtime::SocketEvent::Open);
+    REQUIRE(e.submit_raw(
+                batch(StreamTag::BinanceExchangeInfo, R"({"symbols":[{"symbol":"ETHUSDT"}]})")) ==
+            runtime::RawSubmit::Accepted);
+    e.frame(16);
+    CHECK(e.feed_quality(domain::Venue::BinanceUsdM) == domain::DataQuality::Failed);
+    CHECK(e.feed(domain::Venue::Hyperliquid).phase() == runtime::FeedPhase::Live);
+}
+
+TEST_CASE("a crossed Hyperliquid snapshot is not shown as a live book") {
+    runtime::FakeClock clock;
+    runtime::Engine e(clock);
+    e.on_socket_event(domain::Venue::Hyperliquid, runtime::SocketEvent::Open);
+    const std::string crossed =
+        R"({"channel":"l2Book","data":{"coin":"BTC","time":1,"levels":[[{"px":"101","sz":"1","n":1}],[{"px":"100","sz":"1","n":1}]]}})";
+    REQUIRE(e.submit_raw(batch(StreamTag::HyperliquidWs, crossed)) == runtime::RawSubmit::Accepted);
+    e.frame(16);
+    CHECK(e.book_quality(domain::Venue::Hyperliquid) == domain::DataQuality::GapDetected);
+}

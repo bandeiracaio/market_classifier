@@ -131,6 +131,13 @@ extern "C" void mc_metadata_failed(int venue) noexcept {
     }
 }
 
+extern "C" void mc_frames_dropped(int venue, int count) noexcept {
+    market_classifier::domain::Venue v{};
+    if (venue_from_int(venue, v) && count > 0) {
+        engine().on_frames_dropped(v, static_cast<std::uint32_t>(count));
+    }
+}
+
 extern "C" void mc_retry_venue(int venue) noexcept {
     market_classifier::domain::Venue v{};
     if (venue_from_int(venue, v)) {

@@ -62,3 +62,15 @@ and rebuilt by the next `l2Book` snapshot.
 
 - Binance: server ping every 3 min, answered by the browser automatically.
 - Hyperliquid: driver sends `{"method":"ping"}` every 30 s (server idles out at 60 s).
+
+## Loss detection (final review, 2026-09-27)
+
+- Browser driver buffers report every evicted or oversize frame (`mc_frames_dropped`); the
+  engine counts them and marks a gap for that venue (CVD/footprint/candle markers).
+- Binance `aggTrade` ids are consecutive per symbol; a jump marks a gap, a repeat is dropped.
+- Hyperliquid trade replays on resubscribe are dropped by id (bounded window of 1,024).
+- A requested Binance depth snapshot that has not produced a live book within
+  `k_snapshot_retry_ms` (10 s) is requested again (failed fetch or rejected payload).
+- Startup metadata that fails validation marks the venue `Failed` (user retry).
+- REST responses are submitted immediately, one batch each, so large preloads never evict
+  stream frames or each other.

@@ -23,7 +23,17 @@ bool upsert(std::vector<domain::BookLevel> &side, const domain::BookLevel &level
         return true;
     }
     if (side.size() >= k_max_book_levels_per_side) {
-        return false;
+        if (it == side.end()) {
+            return false; // farther than every kept level: nothing a panel would show
+        }
+        side.pop_back(); // drop the farthest level; the book stays exact near the touch
+        const auto pos =
+            std::lower_bound(side.begin(), side.end(), level.price,
+                             [&](const domain::BookLevel &l, const domain::Decimal &p) {
+                                 return before(l.price, p);
+                             });
+        side.insert(pos, level);
+        return true;
     }
     side.insert(it, level);
     return true;

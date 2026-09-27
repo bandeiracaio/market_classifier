@@ -28,7 +28,7 @@ export const HL_SUBSCRIPTIONS: readonly object[] = [
 type Phase = "idle" | "starting" | "open" | "closed";
 
 export function createHyperliquidDriver(sink: EngineSink, deps: DriverDeps): VenueDriver {
-  const buffer = new FrameBuffer();
+  const buffer = new FrameBuffer(HYPERLIQUID);
   let socket: WebSocket | null = null;
   let phase: Phase = "idle";
   let lastPing = 0;
@@ -46,7 +46,7 @@ export function createHyperliquidDriver(sink: EngineSink, deps: DriverDeps): Ven
       });
       if (!response.ok) throw new Error(String(response.status));
       const text = await response.text();
-      buffer.push(tag, deps.now(), transform ? transform(text) : text);
+      buffer.submitNow(sink, tag, deps.now(), transform ? transform(text) : text);
       return true;
     } catch {
       buffer.stats.restFailures++;

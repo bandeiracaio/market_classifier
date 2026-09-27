@@ -2,12 +2,28 @@
 
 #include "market_classifier/venues/instruments.hpp"
 
+#include <algorithm>
 #include <type_traits>
 #include <variant>
 
 namespace market_classifier::runtime {
 
 namespace {
+// Decimal digits only, no overflow; Binance aggTrade ids are plain unsigned integers.
+std::optional<std::uint64_t> parse_trade_id(const std::string &text) {
+    if (text.empty() || text.size() > 19) {
+        return std::nullopt;
+    }
+    std::uint64_t id = 0;
+    for (const char c : text) {
+        if (c < '0' || c > '9') {
+            return std::nullopt;
+        }
+        id = id * 10 + static_cast<std::uint64_t>(c - '0');
+    }
+    return id;
+}
+
 // Heatmap price quantum: Binance BTCUSDT tick 0.1; Hyperliquid prices are integers at
 // BTC magnitudes (5 significant figures). docs/calculations/heatmap.md.
 const domain::Decimal k_binance_quantum     = domain::Decimal::from_parts(1, 1).value;
@@ -78,6 +94,9 @@ void Engine::process(domain::Venue v, const domain::NormalizedEvent &event) {
         [&](const auto &e) {
             using E = std::decay_t<decltype(e)>;
             if constexpr (std::is_same_v<E, domain::Trade>) {
+                if (!accept_trade(v, e)) {
+                    return;
+                }
                 p.tape.on_trade(e);
                 p.cvd.on_trade(e);
                 p.footprint.on_trade(e);
@@ -123,6 +142,9 @@ domain::DataQuality Engine::book_quality(domain::Venue v) const {
             return domain::DataQuality::Partial;
         }
     }
+    if (hyperliquid_book_.crossed()) {
+        return domain::DataQuality::GapDetected; // never present a crossed book as live
+    }
     return hyperliquid_book_.bids().empty() && hyperliquid_book_.asks().empty()
                ? domain::DataQuality::Partial
                : domain::DataQuality::Live;
@@ -164,6 +186,7 @@ void Engine::on_socket_event(domain::Venue v, SocketEvent kind) {
         ++venue.counters.reconnects;
         // Frames queued from the dead socket are still valid data; keep them, but the
         // stream restarts, so continuity is broken from here.
+        venue.last_agg_trade_id = 0;
         if (v == domain::Venue::BinanceUsdM) {
             binance_book_.reset();
         } else {
@@ -174,12 +197,58 @@ void Engine::on_socket_event(domain::Venue v, SocketEvent kind) {
     }
 }
 
+void Engine::on_frames_dropped(domain::Venue v, std::uint32_t count) {
+    if (count == 0) {
+        return;
+    }
+    venues_.at(venue_index(v)).counters.frames_dropped += count;
+    mark_gap(v);
+}
+
+bool Engine::accept_trade(domain::Venue v, const domain::Trade &trade) {
+    auto &venue = venues_.at(venue_index(v));
+    if (venue.recent_trade_set.contains(trade.source_id)) {
+        ++venue.counters.duplicate_trades;
+        return false;
+    }
+    venue.recent_trade_ids.push_back(trade.source_id);
+    venue.recent_trade_set.insert(trade.source_id);
+    if (venue.recent_trade_ids.size() > k_trade_dedupe_window) {
+        venue.recent_trade_set.erase(venue.recent_trade_ids.front());
+        venue.recent_trade_ids.pop_front();
+    }
+    // Binance aggTrade ids are consecutive per symbol: a jump means trades were lost
+    // upstream of the engine (e.g. browser buffer eviction), so CVD/footprint must break.
+    if (v == domain::Venue::BinanceUsdM) {
+        if (const auto id = parse_trade_id(trade.source_id)) {
+            if (venue.last_agg_trade_id != 0 && *id > venue.last_agg_trade_id + 1) {
+                mark_gap(v);
+            }
+            venue.last_agg_trade_id = std::max(venue.last_agg_trade_id, *id);
+        }
+    }
+    return true;
+}
+
 void Engine::on_metadata_failed(domain::Venue v) {
     venues_.at(venue_index(v)).feed.fail();
 }
 
 void Engine::retry(domain::Venue v) {
     venues_.at(venue_index(v)).feed.retry(now_ms());
+}
+
+// Re-request a depth snapshot that never produced a live book (fetch failed or the payload
+// was rejected); otherwise the book would stay Partial until the next reconnect.
+void Engine::retry_stale_snapshot(std::int64_t now) {
+    auto &binance = venues_.at(0);
+    if (binance_book_.state() == books::SyncState::Live) {
+        binance.snapshot_requested_at = -1;
+    } else if (binance.snapshot_requested_at >= 0 &&
+               now - binance.snapshot_requested_at >= k_snapshot_retry_ms) {
+        binance.snapshot_requested    = true;
+        binance.snapshot_requested_at = -1;
+    }
 }
 
 bool Engine::should_reconnect(domain::Venue v) {
@@ -196,6 +265,9 @@ bool Engine::take_snapshot_request(domain::Venue v) {
     auto &venue              = venues_.at(venue_index(v));
     const bool wanted        = venue.snapshot_requested;
     venue.snapshot_requested = false;
+    if (wanted) {
+        venue.snapshot_requested_at = now_ms(); // retry clock starts when the bridge fetches
+    }
     return wanted;
 }
 
@@ -253,6 +325,12 @@ void Engine::frame(std::int64_t budget_ms) {
                                                                 : hyperliquid_adapter_.adapt(frame);
             if (result.error != venues::AdapterError::None) {
                 ++venue.counters.adapter_errors.at(static_cast<std::size_t>(result.error));
+                // Startup metadata that fails validation leaves the venue unusable:
+                // show Failed with retry instead of Live without a definition (packet §4).
+                if (frame.tag == venues::StreamTag::BinanceExchangeInfo ||
+                    frame.tag == venues::StreamTag::HyperliquidMeta) {
+                    venue.feed.fail();
+                }
                 continue;
             }
             ++venue.counters.frames_adapted;
@@ -263,6 +341,7 @@ void Engine::frame(std::int64_t budget_ms) {
     for (auto &venue : venues_) {
         venue.feed.tick(now);
     }
+    retry_stale_snapshot(now);
 }
 
 } // namespace market_classifier::runtime

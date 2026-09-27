@@ -33,7 +33,7 @@ export const DEPTH_URL = `${BINANCE_REST}/fapi/v1/depth?symbol=BTCUSDT&limit=100
 type Phase = "idle" | "starting" | "open" | "closed";
 
 export function createBinanceDriver(sink: EngineSink, deps: DriverDeps): VenueDriver {
-  const buffer = new FrameBuffer();
+  const buffer = new FrameBuffer(BINANCE);
   let sockets: WebSocket[] = [];
   let phase: Phase = "idle";
   let openCount = 0;
@@ -49,7 +49,7 @@ export function createBinanceDriver(sink: EngineSink, deps: DriverDeps): VenueDr
       const response = await deps.fetch(url);
       if (!response.ok) throw new Error(String(response.status));
       const text = await response.text();
-      buffer.push(tag, deps.now(), transform ? transform(text) : text);
+      buffer.submitNow(sink, tag, deps.now(), transform ? transform(text) : text);
       return true;
     } catch {
       buffer.stats.restFailures++;

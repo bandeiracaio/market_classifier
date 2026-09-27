@@ -20,6 +20,8 @@
 #include <deque>
 #include <optional>
 #include <span>
+#include <string>
+#include <unordered_set>
 
 namespace market_classifier::runtime {
 
@@ -29,6 +31,11 @@ inline constexpr std::size_t k_max_queued_raw_frames = 512;
 inline constexpr std::size_t k_max_queued_raw_bytes  = 4 * 1024 * 1024;
 inline constexpr std::size_t k_max_frames_per_drain  = 256;
 inline constexpr std::size_t k_venue_count           = 2;
+// A REST depth snapshot that has not produced a live book by then is requested again
+// (failed/rejected fetch). 10 s keeps the weight-20 call far below Binance limits.
+inline constexpr std::int64_t k_snapshot_retry_ms = 10'000;
+// Recently seen trade ids per venue; Hyperliquid replays recent trades on (re)subscribe.
+inline constexpr std::size_t k_trade_dedupe_window = 1024;
 
 enum class SocketEvent : std::uint8_t { Open = 0, Close = 1, Error = 2 };
 
@@ -37,11 +44,12 @@ enum class RawSubmit : std::uint8_t { Accepted, AcceptedWithDrop, RejectedDecode
 inline constexpr std::size_t k_adapter_error_kinds = 6; // venues::AdapterError values
 
 struct VenueCounters {
-    std::uint64_t frames_received = 0;
-    std::uint64_t frames_adapted  = 0; // produced at least one event
-    std::uint64_t frames_dropped  = 0; // evicted by queue bounds
-    std::uint64_t events          = 0;
-    std::uint64_t reconnects      = 0;
+    std::uint64_t frames_received  = 0;
+    std::uint64_t frames_adapted   = 0; // produced at least one event
+    std::uint64_t frames_dropped   = 0; // evicted by queue bounds
+    std::uint64_t events           = 0;
+    std::uint64_t reconnects       = 0;
+    std::uint64_t duplicate_trades = 0; // replayed trades dropped by id
     std::array<std::uint64_t, k_adapter_error_kinds> adapter_errors{};
 };
 
@@ -78,6 +86,8 @@ class Engine {
     void on_socket_event(domain::Venue v, SocketEvent kind);
     // Startup metadata unavailable: venue shows Failed until the user retries (packet §4).
     void on_metadata_failed(domain::Venue v);
+    // Frames the browser-side driver buffer had to evict: continuity is broken.
+    void on_frames_dropped(domain::Venue v, std::uint32_t count);
     void retry(domain::Venue v);
     // Bridge asks once per animation frame; true starts one reconnect attempt.
     [[nodiscard]] bool should_reconnect(domain::Venue v);
@@ -130,13 +140,20 @@ class Engine {
         std::deque<bridge::RawFrame> queue;
         std::size_t queued_bytes = 0;
         VenueCounters counters;
-        bool gap                = false;
-        bool snapshot_requested = false;
+        bool gap                           = false;
+        bool snapshot_requested            = false;
+        std::int64_t snapshot_requested_at = -1;  // monotonic ms; -1 = none pending
+        std::deque<std::string> recent_trade_ids; // bounded by k_trade_dedupe_window
+        std::unordered_set<std::string> recent_trade_set;
+        std::uint64_t last_agg_trade_id = 0; // Binance aggTrade ids are consecutive
     };
 
     void dispatch(domain::Venue v, const venues::AdapterResult &result);
     void process(domain::Venue v, const domain::NormalizedEvent &event);
     void sample_book(domain::Venue v, std::int64_t t_ms);
+    // False when the trade is a replay; marks a gap on a Binance aggTrade id jump.
+    bool accept_trade(domain::Venue v, const domain::Trade &trade);
+    void retry_stale_snapshot(std::int64_t now);
     void mark_gap(domain::Venue v);
 
     const Clock &clock_;
