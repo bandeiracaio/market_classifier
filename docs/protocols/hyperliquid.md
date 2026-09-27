@@ -36,3 +36,14 @@ https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint
 
 No public liquidation stream is documented. The MVP shows `Unsupported` and never
 infers liquidations from trades (packet §4.2).
+
+## Normalization choices (adapter, 2026-09-27)
+
+- `activeAssetCtx` has no timestamp: source time = bridge receive time.
+- It yields three events: `AssetMetrics` (mark, oracle, funding), `OpenInterest`
+  (`openInterest` base units, notional = OI × markPx exact, `sample_interval_ms = 0` =
+  streamed), `MarketSummary` (`midPx`, `change_24h = markPx − prevDayPx`, `dayNtlVlm`).
+- A `bbo` with a null side is valid upstream but produces no event (`Ignored`).
+- Live `candle` frames have no closed flag; closed ⇔ `T < receive_time`. In a
+  `candleSnapshot` every bar but the newest is closed.
+- Trade notional treats USDC as USD.

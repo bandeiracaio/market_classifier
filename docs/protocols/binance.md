@@ -45,3 +45,14 @@ far below the 2400/min IP limit. Resyncs add 20 each; OI polling adds 6/min.
 
 Order book sync procedure: https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/How-to-manage-a-local-order-book-correctly
 (read 2026-09-27), implemented per `docs/calculations/book-sync.md`.
+
+## Normalization choices (adapter, 2026-09-27)
+
+- `aggTrade` `m == true` ⇒ aggressor Sell; notional = `p × q` exact, USDT treated as USD.
+- `depthUpdate` → `BookDelta` (`U`, `u`); `pu` travels in
+  `AdapterResult::binance_prev_final_update_ids` so the shared domain type is unchanged.
+- `24hrTicker`: `change_24h` = `p` (absolute), `volume_24h` = `q` (quote/USD volume).
+- `forceOrder`: price = `ap` (average fill), quantity = `z` (filled), side `SELL` ⇒ long
+  liquidated. Binance pushes at most one liquidation snapshot per symbol per 1000 ms,
+  so this is a sample, not every liquidation.
+- REST klines: interval = `closeTime + 1 − openTime`; all rows except the newest are closed.

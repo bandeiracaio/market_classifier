@@ -8,8 +8,12 @@ add_library(mc_domain STATIC
     src/bridge/protocol.cpp
     src/bridge/raw_frame.cpp
     src/domain/decimal.cpp
+    src/domain/decimal_math.cpp
     src/domain/types.cpp
     src/json/json.cpp
+    src/venues/binance_adapter.cpp
+    src/venues/hyperliquid_adapter.cpp
+    src/venues/instruments.cpp
     src/runtime/clock.cpp
     src/runtime/ingress.cpp
     src/runtime/read_model.cpp
