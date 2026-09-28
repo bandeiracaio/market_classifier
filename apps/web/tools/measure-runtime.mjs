@@ -1,8 +1,19 @@
+/* global performance */
 import { chromium } from '@playwright/test';
 
 const targetUrl = process.env.MC_PROFILE_URL ?? 'http://127.0.0.1:5173/';
 const sampleCount = 5;
 const headed = process.env.MC_PROFILE_HEADED === '1';
+// MVP modes (plan Task 13): `--presets` measures each preset for 30 s against live data;
+// `--soak` samples JS + WASM heap every minute for MC_SOAK_MINUTES (default 60).
+const mode = process.argv.includes('--soak')
+	? 'soak'
+	: process.argv.includes('--presets')
+		? 'presets'
+		: 'startup';
+const presetSeconds = Number(process.env.MC_PRESET_SECONDS ?? 30);
+const soakMinutes = Number(process.env.MC_SOAK_MINUTES ?? 60);
+const presets = ['Overview', 'Tape Reader', 'Footprint', 'Liquidity', 'Derivatives'];
 
 const browser = await chromium.launch({
 	headless: !headed,
@@ -46,7 +57,108 @@ function summarize(values) {
 	};
 }
 
+/** Frame-interval stats from requestAnimationFrame over `seconds` (bounded sample array). */
+async function frameStats(page, seconds) {
+	return page.evaluate(async (ms) => {
+		const deltas = [];
+		let last = performance.now();
+		const end = last + ms;
+		await new Promise((resolve) => {
+			const step = (t) => {
+				if (deltas.length < 100_000) deltas.push(t - last);
+				last = t;
+				if (t < end) requestAnimationFrame(step);
+				else resolve();
+			};
+			requestAnimationFrame(step);
+		});
+		deltas.sort((a, b) => a - b);
+		const at = (q) => deltas[Math.min(deltas.length - 1, Math.floor(q * deltas.length))];
+		const mean = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+		return {
+			frames: deltas.length,
+			meanMs: mean,
+			p95Ms: at(0.95),
+			p99Ms: at(0.99),
+			fps: 1000 / mean
+		};
+	}, seconds * 1000);
+}
+
+async function heap(page) {
+	return page.evaluate(() => ({
+		jsHeapBytes: performance.memory?.usedJSHeapSize ?? null,
+		wasmHeapBytes: Number(document.body.dataset.wasmHeapBytes ?? NaN),
+		binanceEvents: Number(document.body.dataset.binanceEvents ?? 0),
+		hyperliquidEvents: Number(document.body.dataset.hyperliquidEvents ?? 0)
+	}));
+}
+
+async function openLive(context) {
+	const page = await context.newPage();
+	await page.goto(targetUrl);
+	await page.waitForFunction(() => document.body.dataset.wasmStatus === 'ready', undefined, {
+		timeout: 30_000
+	});
+	// Let both venues connect and preload before measuring.
+	await page.waitForFunction(
+		() =>
+			document.body.dataset.binancePhase === '1' && document.body.dataset.hyperliquidPhase === '1',
+		undefined,
+		{ timeout: 60_000 }
+	);
+	return page;
+}
+
+async function measurePresets() {
+	const context = await browser.newContext();
+	const page = await openLive(context);
+	const results = [];
+	for (let index = 0; index < presets.length; index += 1) {
+		await page.evaluate((i) => window.mcTerminal._mc_debug_activate_layout(i), index);
+		await page.waitForTimeout(2000); // settle layout
+		results.push({
+			preset: presets[index],
+			...(await frameStats(page, presetSeconds)),
+			...(await heap(page))
+		});
+	}
+	await context.close();
+	return results;
+}
+
+async function soak() {
+	const context = await browser.newContext();
+	const page = await openLive(context);
+	await page.evaluate(() => window.mcTerminal._mc_debug_activate_layout(3)); // Liquidity: heaviest stores
+	const samples = [];
+	for (let minute = 0; minute <= soakMinutes; minute += 1) {
+		samples.push({ minute, ...(await heap(page)) });
+		console.error(JSON.stringify(samples.at(-1)));
+		if (minute < soakMinutes) await page.waitForTimeout(60_000);
+	}
+	await context.close();
+	return samples;
+}
+
 try {
+	if (mode !== 'startup') {
+		const result = mode === 'soak' ? await soak() : await measurePresets();
+		console.log(
+			JSON.stringify(
+				{
+					method: `Playwright ${headed ? 'headed' : 'headless'} Chromium, live venue data`,
+					mode,
+					browserVersion: browser.version(),
+					result
+				},
+				null,
+				2
+			)
+		);
+		await browser.close();
+		process.exit(0);
+	}
 	const cold = [];
 	for (let index = 0; index < sampleCount; index += 1) {
 		const context = await browser.newContext();

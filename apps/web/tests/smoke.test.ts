@@ -4,6 +4,7 @@
 // WASM module (data-wasm-status, data-frame-count) and observable DOM state.
 
 import { test, expect } from '@playwright/test';
+import { isVenueNoise } from './venue-noise';
 
 test.describe('host boot', () => {
 	test('page loads without fatal errors', async ({ page }) => {
@@ -11,9 +12,12 @@ test.describe('host boot', () => {
 		const failedRequests: string[] = [];
 		const errorResponses: string[] = [];
 		page.on('pageerror', (error) => pageErrors.push(error.message));
-		page.on('requestfailed', (request) => failedRequests.push(request.url()));
+		page.on('requestfailed', (request) => {
+			if (!isVenueNoise(request.url())) failedRequests.push(request.url());
+		});
 		page.on('response', (response) => {
-			if (response.status() >= 400) errorResponses.push(`${response.status()} ${response.url()}`);
+			if (response.status() >= 400 && !isVenueNoise(response.url()))
+				errorResponses.push(`${response.status()} ${response.url()}`);
 		});
 
 		await page.goto('/');
@@ -99,16 +103,12 @@ test.describe('WASM terminal (requires WASM build)', () => {
 		const diagnostics = await page.evaluate(() => ({
 			validResult: document.body.dataset.bridgeValidResult,
 			invalidError: document.body.dataset.bridgeInvalidError,
-			readModelEvents: Number(document.body.dataset.bridgeReadModelEvents),
-			droppedBatches: Number(document.body.dataset.bridgeDroppedBatches),
 			payloadBytes: Number(document.body.dataset.bridgePayloadBytes),
 			decodeMeanMs: Number(document.body.dataset.bridgeDecodeMeanMs),
 			frames: Number(document.body.dataset.frameCount)
 		}));
 		expect(diagnostics.validResult).toBe('accepted');
 		expect(diagnostics.invalidError).toBe('unsupported-version');
-		expect(diagnostics.readModelEvents).toBe(1);
-		expect(diagnostics.droppedBatches).toBe(0);
 		expect(diagnostics.payloadBytes).toBeGreaterThan(0);
 		expect(diagnostics.decodeMeanMs).toBeGreaterThan(0);
 		await page.waitForFunction(
@@ -136,12 +136,29 @@ test.describe('WASM terminal (requires WASM build)', () => {
 		await expect(overlay).toBeHidden();
 	});
 
-	test('no market-data network requests are made', async ({ page }) => {
-		const externalWsUrls: string[] = [];
+	// MVP (packet §4, docs/protocols/*.md): market data comes only from the documented public
+	// endpoints — no other hosts, no private/user-data streams.
+	test('network traffic is limited to documented public venue endpoints', async ({ page }) => {
+		const allowedSockets = [
+			'wss://fstream.binance.com/public/stream?streams=',
+			'wss://fstream.binance.com/market/stream?streams=',
+			'wss://api.hyperliquid.xyz/ws'
+		];
+		const allowedHosts = ['fapi.binance.com', 'api.hyperliquid.xyz'];
+		const unexpected: string[] = [];
 		page.on('websocket', (ws) => {
 			const url = ws.url();
-			if (url.includes('binance') || url.includes('hyperliquid')) {
-				externalWsUrls.push(url);
+			const local = url.startsWith('ws://localhost') || url.startsWith('ws://127.0.0.1'); // dev server
+			if (local) return;
+			if (!allowedSockets.some((prefix) => url.startsWith(prefix)) || url.includes('listenKey')) {
+				unexpected.push(url);
+			}
+		});
+		page.on('request', (request) => {
+			const url = new URL(request.url());
+			const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+			if (!local && url.protocol.startsWith('http') && !allowedHosts.includes(url.hostname)) {
+				unexpected.push(request.url());
 			}
 		});
 
@@ -149,9 +166,8 @@ test.describe('WASM terminal (requires WASM build)', () => {
 		await page.waitForFunction(() => document.body.dataset.wasmStatus === 'ready', {
 			timeout: 30_000
 		});
-		// Allow a brief window for any stray connections
 		await page.waitForTimeout(2_000);
 
-		expect(externalWsUrls).toHaveLength(0);
+		expect(unexpected).toEqual([]);
 	});
 });

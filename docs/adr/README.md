@@ -11,6 +11,7 @@ Use sequential files:
 0002-cpp-test-framework.md
 0003-decimal-representation.md
 0004-bridge-batch-encoding.md
+0005-json-parser.md
 ```
 
 ## Status values

@@ -6,9 +6,25 @@ cmake_minimum_required(VERSION 3.28)
 add_library(mc_domain STATIC
     src/bridge/browser_api.cpp
     src/bridge/protocol.cpp
+    src/bridge/raw_frame.cpp
+    src/books/binance_book_sync.cpp
+    src/books/order_book.cpp
     src/domain/decimal.cpp
+    src/domain/decimal_math.cpp
     src/domain/types.cpp
+    src/json/json.cpp
+    src/processors/candles.cpp
+    src/processors/cvd.cpp
+    src/processors/footprint.cpp
+    src/processors/heatmap.cpp
+    src/processors/metrics.cpp
+    src/processors/trades.cpp
+    src/venues/binance_adapter.cpp
+    src/venues/hyperliquid_adapter.cpp
+    src/venues/instruments.cpp
     src/runtime/clock.cpp
+    src/runtime/engine.cpp
+    src/runtime/feed_state.cpp
     src/runtime/ingress.cpp
     src/runtime/read_model.cpp
     src/runtime/replay.cpp
@@ -17,6 +33,7 @@ add_library(mc_domain STATIC
 target_include_directories(mc_domain PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+target_link_libraries(mc_domain PRIVATE mc_yyjson)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(mc_domain PRIVATE
@@ -29,18 +46,52 @@ elseif(MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# UI library — panels and workspace; reads engine read models only
+# ---------------------------------------------------------------------------
+add_library(mc_ui STATIC
+    src/ui/panel_host.cpp
+    src/ui/panel_registry.cpp
+    src/ui/panels/bbo_spread.cpp
+    src/ui/panels/candles.cpp
+    src/ui/panels/cvd.cpp
+    src/ui/panels/depth.cpp
+    src/ui/panels/diagnostics.cpp
+    src/ui/panels/footprint.cpp
+    src/ui/panels/funding_oi.cpp
+    src/ui/panels/heatmap.cpp
+    src/ui/panels/ladder.cpp
+    src/ui/panels/liquidations.cpp
+    src/ui/panels/overview.cpp
+    src/ui/panels/trades_tape.cpp
+    src/ui/panels/volume_profile.cpp
+    src/ui/workspace.cpp
+    src/ui/workspace_codec.cpp
+    src/ui/workspace_controller.cpp
+)
+target_include_directories(mc_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(mc_ui PUBLIC mc_domain mc_imgui mc_implot)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(mc_ui PRIVATE -Wall -Wextra -Wpedantic -Werror -Wno-unused-parameter)
+elseif(MSVC)
+    target_compile_options(mc_ui PRIVATE /W4 /WX /wd4100 /wd4267 /utf-8 /D_CRT_SECURE_NO_WARNINGS)
+endif()
+
+# ---------------------------------------------------------------------------
 # Terminal executable / WASM module
 # ---------------------------------------------------------------------------
 add_executable(market_classifier
     src/main.cpp
+    src/app/app.cpp
 )
 
 target_include_directories(market_classifier PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_link_libraries(market_classifier PRIVATE
     mc_domain
+    mc_ui
     mc_imgui
     mc_implot
 )
@@ -88,7 +139,8 @@ if(EMSCRIPTEN)
         "SHELL:-s ENVIRONMENT=web"
         "SHELL:-s EXPORT_NAME=MarketClassifier"
         "SHELL:-s MODULARIZE=1"
-        "SHELL:-s EXPORTED_FUNCTIONS=['_main','_mc_bridge_decode','_mc_bridge_submit','_mc_bridge_result_name','_mc_bridge_read_model_events','_mc_bridge_dropped_batches']"
+        "SHELL:-s EXPORTED_RUNTIME_METHODS=['HEAPU8','UTF8ToString','stringToUTF8','lengthBytesUTF8']"
+        "SHELL:-s EXPORTED_FUNCTIONS=['_main','_mc_bridge_decode','_mc_bridge_result_name','_mc_submit_raw','_mc_socket_event','_mc_should_reconnect','_mc_request_snapshot','_mc_metadata_failed','_mc_frames_dropped','_mc_retry_venue','_mc_engine_frame','_mc_venue_stat','_mc_debug_open_panel','_mc_debug_activate_layout','_mc_debug_save_layout_as','_mc_workspace_export','_mc_workspace_import','_mc_workspace_reset','_mc_workspace_dirty','_malloc','_free']"
     )
 
     # Copy .wasm alongside .js — Emscripten generates both with matching names
@@ -99,8 +151,8 @@ if(EMSCRIPTEN)
 endif()
 
 # ---------------------------------------------------------------------------
-# Native unit tests — Catch2, not built for WASM
+# Unit tests — Catch2. Native always; WASM (Node) when MC_WASM_TESTS=ON.
 # ---------------------------------------------------------------------------
-if(NOT EMSCRIPTEN)
+if(NOT EMSCRIPTEN OR MC_WASM_TESTS)
     add_subdirectory(tests)
 endif()

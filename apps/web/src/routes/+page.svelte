@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { loadTerminal, type TerminalStatus } from '$lib/terminal';
+	import { importWorkspaceFile, loadTerminal, type TerminalStatus } from '$lib/terminal';
 
 	let status = $state<TerminalStatus>('loading');
 	let errorMessage = $state<string | null>(null);
+	let notice = $state<string | null>(null);
+	let fileInput = $state<HTMLInputElement>();
 
 	onMount(() => {
 		loadTerminal({
@@ -13,7 +15,11 @@
 			onError: (msg) => {
 				status = 'error';
 				errorMessage = msg;
-			}
+			},
+			onNotice: (msg) => {
+				notice = msg;
+			},
+			onImportRequested: () => fileInput?.click()
 		});
 	});
 </script>
@@ -23,6 +29,20 @@
 </svelte:head>
 
 <div id="mc-root">
+	{#if notice}
+		<div class="mc-banner" role="alert" data-testid="mc-notice">
+			<span>{notice}</span>
+			<button onclick={() => (notice = null)} aria-label="Dismiss">×</button>
+		</div>
+	{/if}
+	<input
+		bind:this={fileInput}
+		type="file"
+		accept="application/json,.json"
+		hidden
+		data-testid="mc-import-input"
+		onchange={(e) => importWorkspaceFile(e.currentTarget).then((n) => (notice = n))}
+	/>
 	<!-- The Emscripten SDL2 port targets the canvas with id="canvas" by default -->
 	<canvas id="canvas" aria-label="Market Classifier terminal"></canvas>
 

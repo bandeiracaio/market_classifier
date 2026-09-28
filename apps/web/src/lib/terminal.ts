@@ -9,11 +9,57 @@
 // The WASM module itself sets data-wasm-status and data-frame-count on document.body
 // (see engine/src/main.cpp js_set_wasm_ready / js_increment_frame_count).
 
+import { createBinanceDriver } from '../../../../bridge/src/venues/binance';
+import {
+	BINANCE,
+	HYPERLIQUID,
+	type EngineSink,
+	type VenueDriver,
+	type VenueId
+} from '../../../../bridge/src/venues/driver';
+import { createHyperliquidDriver } from '../../../../bridge/src/venues/hyperliquid';
+import {
+	codecErrorReason,
+	createAutosave,
+	loadWorkspace,
+	openIndexedDbStore,
+	validateImportFile,
+	type KeyValueStore,
+	type WorkspaceTarget
+} from '../../../../bridge/src/persistence';
+
+import { base } from '$app/paths';
+
 export type TerminalStatus = 'loading' | 'ready' | 'error';
 
 interface LoadCallbacks {
 	onReady: () => void;
 	onError: (message: string) => void;
+	/** Workspace fallback / import results shown in the host banner. */
+	onNotice?: (message: string) => void;
+	/** File > Import chosen in the terminal: the host opens a file picker. */
+	onImportRequested?: () => void;
+}
+
+/** Host-side handle for workspace file actions. */
+export interface TerminalHandle {
+	/** Returns null when applied, or a human-readable rejection reason. */
+	importWorkspace(text: string): string | null;
+	exportWorkspace(): string;
+}
+
+let handle: TerminalHandle | null = null;
+
+/** Reads the chosen file, applies it, and returns the banner text. Clears the input. */
+export async function importWorkspaceFile(input: HTMLInputElement): Promise<string | null> {
+	const file = input.files?.[0];
+	input.value = '';
+	if (!file || !handle) return null;
+	const reason = handle.importWorkspace(await file.text());
+	return reason === null ? 'Workspace imported' : `Import rejected: ${reason}`;
+}
+export function terminalHandle(): TerminalHandle | null {
+	return handle;
 }
 
 // The Emscripten MODULARIZE=1 factory function signature.
@@ -24,6 +70,143 @@ interface EmscriptenModule {
 	locateFile?: (path: string, prefix: string) => string;
 }
 
+// C exports used by the venue drivers (engine/include/market_classifier/bridge/browser_api.hpp).
+interface EngineExports {
+	HEAPU8: Uint8Array;
+	_malloc(size: number): number;
+	_free(ptr: number): void;
+	_mc_submit_raw(ptr: number, size: number): number;
+	_mc_socket_event(venue: number, kind: number): void;
+	_mc_should_reconnect(venue: number): number;
+	_mc_request_snapshot(venue: number): number;
+	_mc_metadata_failed(venue: number): void;
+	_mc_frames_dropped(venue: number, count: number): void;
+	_mc_venue_stat(venue: number, which: number): number;
+	_mc_workspace_export(): number;
+	_mc_workspace_import(ptr: number, size: number): number;
+	_mc_workspace_reset(): void;
+	_mc_workspace_dirty(): number;
+	UTF8ToString(ptr: number): string;
+	lengthBytesUTF8(text: string): number;
+	stringToUTF8(text: string, ptr: number, maxBytes: number): void;
+}
+
+function createWorkspaceTarget(m: EngineExports): WorkspaceTarget {
+	return {
+		importJson(json: string): number {
+			const size = m.lengthBytesUTF8(json);
+			const ptr = m._malloc(size + 1);
+			if (ptr === 0) return 1;
+			try {
+				m.stringToUTF8(json, ptr, size + 1);
+				return m._mc_workspace_import(ptr, size);
+			} finally {
+				m._free(ptr);
+			}
+		},
+		exportJson: () => m.UTF8ToString(m._mc_workspace_export()),
+		reset: () => m._mc_workspace_reset(),
+		takeDirty: () => m._mc_workspace_dirty() === 1
+	};
+}
+
+function downloadJson(text: string): void {
+	const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = 'market-classifier-workspace.json';
+	a.click();
+	URL.revokeObjectURL(url);
+}
+
+/** Restores the saved workspace, then autosaves on every change (debounced). */
+async function startPersistence(
+	m: EngineExports,
+	callbacks: LoadCallbacks
+): Promise<(t: number) => void> {
+	const target = createWorkspaceTarget(m);
+	let store: KeyValueStore | null = null;
+	try {
+		store = await openIndexedDbStore(indexedDB);
+	} catch {
+		callbacks.onNotice?.('Workspace storage unavailable; changes will not be saved');
+	}
+	if (store) {
+		const outcome = await loadWorkspace(store, target);
+		document.body.dataset.workspaceSource = outcome.source;
+		if (outcome.notice) callbacks.onNotice?.(outcome.notice);
+	}
+	handle = {
+		importWorkspace(text: string): string | null {
+			const check = validateImportFile(text);
+			if (!check.ok) return check.reason;
+			const code = target.importJson(text);
+			return code === 0 ? null : codecErrorReason(code);
+		},
+		exportWorkspace: () => target.exportJson()
+	};
+	window.addEventListener('mc-workspace', (event: Event) => {
+		const action = (event as CustomEvent<string>).detail;
+		if (action === 'export') downloadJson(target.exportJson());
+		if (action === 'import') callbacks.onImportRequested?.();
+	});
+	const autosave = store ? createAutosave(store, target) : null;
+	return (t: number) => void autosave?.tick(t);
+}
+
+/** Engine sink over the WASM exports: copies each batch into the WASM heap once. */
+function createSink(m: EngineExports): EngineSink {
+	return {
+		submitRaw(bytes: Uint8Array): number {
+			const ptr = m._malloc(bytes.length);
+			if (ptr === 0) return 255;
+			try {
+				m.HEAPU8.set(bytes, ptr);
+				return m._mc_submit_raw(ptr, bytes.length);
+			} finally {
+				m._free(ptr);
+			}
+		},
+		socketEvent: (venue: VenueId, kind) => m._mc_socket_event(venue, kind),
+		shouldReconnect: (venue: VenueId) => m._mc_should_reconnect(venue) === 1,
+		requestSnapshot: (venue: VenueId) => m._mc_request_snapshot(venue) === 1,
+		metadataFailed: (venue: VenueId) => m._mc_metadata_failed(venue),
+		framesDropped: (venue: VenueId, count: number) => m._mc_frames_dropped(venue, count)
+	};
+}
+
+/**
+ * Starts both venue drivers and pumps them once per animation frame, before the WASM
+ * main loop drains the engine. Exposes per-venue counters on <body> for tests/diagnostics.
+ */
+function startDrivers(m: EngineExports, onFrame: (t: number) => void): void {
+	const sink = createSink(m);
+	const deps = { WebSocket, fetch: fetch.bind(window), now: () => Date.now() };
+	const drivers: VenueDriver[] = [
+		createBinanceDriver(sink, deps),
+		createHyperliquidDriver(sink, deps)
+	];
+	for (const d of drivers) d.start();
+	const pump = (t: number) => {
+		for (const d of drivers) d.pump(t);
+		onFrame(t);
+		for (const [venue, name] of [
+			[BINANCE, 'binance'],
+			[HYPERLIQUID, 'hyperliquid']
+		] as const) {
+			document.body.dataset[`${name}Frames`] = String(m._mc_venue_stat(venue, 0));
+			document.body.dataset[`${name}Events`] = String(m._mc_venue_stat(venue, 3));
+			// Feed phase (0 Connecting, 1 Live, 2 Stale, 3 Reconnecting, 4 Failed) and data age.
+			document.body.dataset[`${name}Phase`] = String(m._mc_venue_stat(venue, 6));
+			document.body.dataset[`${name}AgeMs`] = String(m._mc_venue_stat(venue, 8));
+		}
+		// Live WASM heap (grows with ALLOW_MEMORY_GROWTH) for soak measurements.
+		document.body.dataset.wasmHeapBytes = String(m.HEAPU8.buffer.byteLength);
+		requestAnimationFrame(pump);
+	};
+	requestAnimationFrame(pump);
+}
+
 type EmscriptenFactory = (overrides?: Partial<EmscriptenModule>) => Promise<EmscriptenModule>;
 
 declare global {
@@ -32,7 +215,8 @@ declare global {
 	}
 }
 
-const WASM_JS_PATH = '/wasm/market_classifier.js';
+// Base-path aware so the Pages subpath (/<repo>/wasm/...) resolves.
+const WASM_JS_PATH = `${base}/wasm/market_classifier.js`;
 const LOAD_TIMEOUT_MS = 30_000;
 
 export function loadTerminal(callbacks: LoadCallbacks): void {
@@ -70,10 +254,10 @@ export function loadTerminal(callbacks: LoadCallbacks): void {
 		}
 
 		try {
-			await factory({
+			const module = await factory({
 				canvas,
 				// Emscripten locateFile resolves sibling WASM binary relative to the JS glue
-				locateFile: (path: string) => `/wasm/${path}`,
+				locateFile: (path: string) => `${base}/wasm/${path}`,
 				onRuntimeInitialized: () => {
 					clearTimeout(timeout);
 					if (!timedOut) {
@@ -81,6 +265,13 @@ export function loadTerminal(callbacks: LoadCallbacks): void {
 					}
 				}
 			});
+			if (!timedOut) {
+				// Debug/test hooks (e.g. _mc_debug_open_panel) are reachable from Playwright.
+				(window as unknown as { mcTerminal?: unknown }).mcTerminal = module;
+				const exports = module as unknown as EngineExports;
+				const persist = await startPersistence(exports, callbacks);
+				startDrivers(exports, persist);
+			}
 		} catch (err: unknown) {
 			clearTimeout(timeout);
 			if (!timedOut) {

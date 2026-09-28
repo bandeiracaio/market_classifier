@@ -46,6 +46,7 @@ source ./emsdk_env.sh
 | ImPlot | `v0.17` | Plot primitives | MIT | 2026-09-24 |
 | SDL2 | `release-2.30.8` | Windowing + input (native builds) | Zlib | 2026-09-24 |
 | Catch2 | `v3.7.1` | C++ test framework (native only) | BSL-1.0 | 2026-09-24 |
+| yyjson | `0.10.0` | JSON parser for venue adapters (ADR-0005), reader only | MIT | 2026-09-27 |
 
 The Dear ImGui revision was resolved directly from the official docking branch with
 `git ls-remote` and is immutable. Update it only through the documented dependency

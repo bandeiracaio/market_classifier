@@ -6,7 +6,7 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 project(market_classifier
     VERSION 0.1.0
-    LANGUAGES CXX
+    LANGUAGES C CXX
 )
 
 set(CMAKE_CXX_STANDARD 20)
@@ -98,10 +98,32 @@ target_include_directories(mc_implot SYSTEM PUBLIC ${implot_SOURCE_DIR})
 target_link_libraries(mc_implot PUBLIC mc_imgui)
 
 # ---------------------------------------------------------------------------
-# Catch2 — native test framework (ADR-0002)
+# yyjson — JSON parser for venue adapters (ADR-0005)
+# Pinned: 0.10.0 https://github.com/ibireme/yyjson/releases
+# Built as our own static C library; upstream CMake is not added (SOURCE_SUBDIR
+# points at a non-existent dir) so only yyjson.c is compiled.
+# ---------------------------------------------------------------------------
+FetchContent_Declare(
+    yyjson
+    GIT_REPOSITORY https://github.com/ibireme/yyjson.git
+    GIT_TAG        0.10.0
+    GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR  mc-no-cmake
+)
+FetchContent_MakeAvailable(yyjson)
+add_library(mc_yyjson STATIC ${yyjson_SOURCE_DIR}/src/yyjson.c)
+set_target_properties(mc_yyjson PROPERTIES LINKER_LANGUAGE C)
+target_include_directories(mc_yyjson SYSTEM PUBLIC ${yyjson_SOURCE_DIR}/src)
+# Reader only: the engine never serializes through yyjson.
+target_compile_definitions(mc_yyjson PRIVATE YYJSON_DISABLE_WRITER=1 YYJSON_DISABLE_UTILS=1)
+
+# ---------------------------------------------------------------------------
+# Catch2 — test framework (ADR-0002). Native by default; MC_WASM_TESTS=ON also builds the
+# suite with Emscripten for Node so replay tests run in WASM (packet §12 criterion 1).
 # Pinned: v3.7.1 (2024-10-04) https://github.com/catchorg/Catch2/releases
 # ---------------------------------------------------------------------------
-if(NOT EMSCRIPTEN)
+option(MC_WASM_TESTS "Build the Catch2 suite for Node under Emscripten" OFF)
+if(NOT EMSCRIPTEN OR MC_WASM_TESTS)
     FetchContent_Declare(
         Catch2
         GIT_REPOSITORY https://github.com/catchorg/Catch2.git

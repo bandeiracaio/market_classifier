@@ -1,0 +1,24 @@
+[
+ {
+  "stream": "btcusdt@forceOrder",
+  "data": {
+   "e": "forceOrder",
+   "E": 1790488549227,
+   "o": {
+    "s": "BTCUSDT",
+    "S": "BUY",
+    "o": "LIMIT",
+    "f": "IOC",
+    "q": "0.057",
+    "p": "84772.70",
+    "ap": "84439.90",
+    "X": "FILLED",
+    "l": "0.057",
+    "z": "0.057",
+    "T": 1790488548221,
+    "ps": "BTCUSDT",
+    "st": 1
+   }
+  }
+ }
+]

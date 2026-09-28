@@ -6,6 +6,11 @@ namespace market_classifier::runtime {
 
 class Clock {
   public:
+    Clock()                                                               = default;
+    Clock(const Clock &)                                                  = default;
+    Clock &operator=(const Clock &)                                       = default;
+    Clock(Clock &&)                                                       = default;
+    Clock &operator=(Clock &&)                                            = default;
     virtual ~Clock()                                                      = default;
     [[nodiscard]] virtual std::int64_t wall_time_ms() const noexcept      = 0;
     [[nodiscard]] virtual std::int64_t monotonic_time_ms() const noexcept = 0;

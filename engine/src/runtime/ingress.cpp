@@ -7,20 +7,23 @@ namespace market_classifier::runtime {
 namespace {
 
 bool add_size(std::size_t &total, std::size_t value) {
-    if (value > k_max_batch_bytes - total)
+    if (value > k_max_batch_bytes - total) {
         return false;
+    }
     total += value;
     return true;
 }
 
 bool measure_event(const domain::NormalizedEvent &event, std::size_t &total) {
-    if (!add_size(total, sizeof(domain::NormalizedEvent)))
+    if (!add_size(total, sizeof(domain::NormalizedEvent))) {
         return false;
+    }
     return std::visit(
         [&total](const auto &value) {
             using Event = std::decay_t<decltype(value)>;
-            if (!add_size(total, value.meta.instrument().native_symbol().size()))
+            if (!add_size(total, value.meta.instrument().native_symbol().size())) {
                 return false;
+            }
             if constexpr (std::is_same_v<Event, domain::InstrumentDefinition>) {
                 return value.base_asset.size() <= k_max_dynamic_text_bytes &&
                        value.quote_asset.size() <= k_max_dynamic_text_bytes &&
@@ -33,15 +36,17 @@ bool measure_event(const domain::NormalizedEvent &event, std::size_t &total) {
             } else if constexpr (std::is_same_v<Event, domain::BookSnapshot>) {
                 if (value.bids.size() > k_max_levels_per_event ||
                     value.asks.size() > k_max_levels_per_event ||
-                    value.source_cursor.size() > k_max_dynamic_text_bytes)
+                    value.source_cursor.size() > k_max_dynamic_text_bytes) {
                     return false;
+                }
                 return add_size(total, (value.bids.size() + value.asks.size()) *
                                            sizeof(domain::BookLevel)) &&
                        add_size(total, value.source_cursor.size());
             } else if constexpr (std::is_same_v<Event, domain::BookDelta>) {
                 if (value.changed_bids.size() > k_max_levels_per_event ||
-                    value.changed_asks.size() > k_max_levels_per_event)
+                    value.changed_asks.size() > k_max_levels_per_event) {
                     return false;
+                }
                 return add_size(total, (value.changed_bids.size() + value.changed_asks.size()) *
                                            sizeof(domain::BookLevel));
             } else {
@@ -54,8 +59,9 @@ bool measure_event(const domain::NormalizedEvent &event, std::size_t &total) {
 bool valid_owned_size(const IngressBatch &batch) {
     std::size_t total = sizeof(IngressBatch);
     for (const auto &event : batch.events) {
-        if (!measure_event(event, total))
+        if (!measure_event(event, total)) {
             return false;
+        }
     }
     return true;
 }
@@ -115,8 +121,9 @@ SubmitResult BoundedIngress::submit(IngressBatch batch) {
 }
 
 std::optional<IngressBatch> BoundedIngress::consume_next() {
-    if (queue_.empty())
+    if (queue_.empty()) {
         return std::nullopt;
+    }
     IngressBatch batch = std::move(queue_.front());
     queue_.pop_front();
     queued_events_ -= batch.events.size();
@@ -125,8 +132,9 @@ std::optional<IngressBatch> BoundedIngress::consume_next() {
 }
 
 bool BoundedIngress::transition_quality(domain::DataQuality next) noexcept {
-    if (!domain::can_transition(quality_, next))
+    if (!domain::can_transition(quality_, next)) {
         return false;
+    }
     quality_ = next;
     return true;
 }

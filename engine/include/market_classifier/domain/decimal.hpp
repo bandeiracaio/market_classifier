@@ -55,7 +55,7 @@ struct DecimalResult {
                             DecimalError result_error = DecimalError::None) noexcept
         : value(result_value), error(result_error) {}
 
-    Decimal value{};
+    Decimal value;
     DecimalError error = DecimalError::None;
 
     [[nodiscard]] constexpr explicit operator bool() const noexcept {

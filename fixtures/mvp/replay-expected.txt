@@ -1,0 +1,27 @@
+[binance]
+frames received=230 adapted=230 events=234 dropped=0 errors=0,0,0,0,0,0,
+feed=Live book=Live liquidations=Live
+tick=0.1 step=0.001
+book bids=645 asks=528 best_bid=84499.5 best_ask=84499.6 crossed=0
+tape=5 last=84499.6
+cvd=0.27 points=1 unknown=0
+footprint candles=1 last_open=1790488140000 cells=1 poc=84499
+candles_1m=6 last_open=1790488140000 last_close=84499.6 closed=0
+heatmap columns=1 trades=5
+mark=84499.6 funding=0.00003749 oi=94034.253 mid=84499.55 spread_points=1
+summary last=84499.5 vol24h=3001526136.35
+liquidations=1
+[hyperliquid]
+frames received=33 adapted=27 events=76 dropped=0 errors=0,0,0,0,0,6,
+feed=Live book=Live liquidations=Unsupported
+tick=1 step=0.00001
+book bids=20 asks=20 best_bid=84509 best_ask=84510 crossed=0
+tape=39 last=84509
+cvd=-0.01083 points=1 unknown=0
+footprint candles=1 last_open=1790488080000 cells=5 poc=84504
+candles_1m=6 last_open=1790488080000 last_close=84510 closed=1
+heatmap columns=1 trades=39
+mark=84504 funding=0.0000125 oi=37115.05854 mid=84504.5 spread_points=3
+summary last=- vol24h=857060363.7358509302
+liquidations=0
+[basis] -4.95 bps=-0.590000

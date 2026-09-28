@@ -14,6 +14,16 @@ export default [
 				process: 'readonly',
 				setTimeout: 'readonly',
 				clearTimeout: 'readonly',
+				requestAnimationFrame: 'readonly',
+				WebSocket: 'readonly',
+				fetch: 'readonly',
+				indexedDB: 'readonly',
+				URL: 'readonly',
+				Blob: 'readonly',
+				CustomEvent: 'readonly',
+				Event: 'readonly',
+				FileReader: 'readonly',
+				HTMLInputElement: 'readonly',
 				window: 'readonly'
 			}
 		}

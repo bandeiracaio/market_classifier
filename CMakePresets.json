@@ -44,6 +44,16 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
+    },
+    {
+      "name": "wasm-tests",
+      "displayName": "WebAssembly unit tests on Node (invoke via: emcmake cmake --preset wasm-tests)",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "MC_WASM_TESTS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -62,6 +72,13 @@
     {
       "name": "wasm-debug",
       "configurePreset": "wasm-debug"
+    },
+    {
+      "name": "wasm-tests",
+      "configurePreset": "wasm-tests",
+      "targets": [
+        "mc_tests"
+      ]
     }
   ],
   "testPresets": [
@@ -75,6 +92,13 @@
     {
       "name": "native-debug",
       "configurePreset": "native-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "wasm-tests",
+      "configurePreset": "wasm-tests",
       "output": {
         "outputOnFailure": true
       }

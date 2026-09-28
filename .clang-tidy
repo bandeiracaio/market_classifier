@@ -17,7 +17,8 @@ Checks: >
 
 WarningsAsErrors: "*"
 
-HeaderFilterRegex: "engine/include/market_classifier/.*"
+# Separator-agnostic so Windows and Linux runs check the same headers.
+HeaderFilterRegex: "engine[\\/]include[\\/]market_classifier[\\/].*"
 
 CheckOptions:
   - key:   readability-identifier-naming.ClassCase
@@ -26,8 +27,19 @@ CheckOptions:
     value: lower_case
   - key:   readability-identifier-naming.VariableCase
     value: lower_case
-  - key:   readability-identifier-naming.ConstantPrefix
+  # k_ marks named constants at namespace/class scope (constexpr, globals, static
+  # members). Function-local `const` values and const parameters are ordinary
+  # lower_case variables, as throughout the codebase since M1.
+  - key:   readability-identifier-naming.GlobalConstantPrefix
     value: k_
+  - key:   readability-identifier-naming.ConstexprVariablePrefix
+    value: k_
+  - key:   readability-identifier-naming.ClassConstantPrefix
+    value: k_
+  - key:   readability-identifier-naming.LocalConstantCase
+    value: lower_case
+  - key:   readability-identifier-naming.ConstantParameterCase
+    value: lower_case
   - key:   modernize-use-default-member-init.UseAssignment
     value: "true"
 ...

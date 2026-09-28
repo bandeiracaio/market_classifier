@@ -7,6 +7,8 @@ License: Apache License 2.0
 Primary implementation agent: Claude Code  
 Architecture and review: Codex + project owner
 
+> **Active phase:** the current bounded scope is the BTC MVP in `docs/milestones/MVP_BTC_TERMINAL.md`, which supersedes conflicting sections of this document and replaces the M2–M9 plan in §22 for now.
+
 ## 1. Purpose
 
 Market Classifier is an open-source, local-first web terminal for inspecting live perpetual-futures market data. The first release connects the browser directly to Binance USD-M Futures and Hyperliquid, normalizes their public feeds, and renders every supported stream through a suitable real-time visualization.
